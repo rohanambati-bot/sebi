@@ -1,0 +1,61 @@
+{
+  "scans": [
+    {
+      "id": 1,
+      "content_type": "text",
+      "text_or_filename": "Dear Customer, SEBI URGENT NOTICE: Your trading account will be suspended within 24 hours...",
+      "sender": "alerts@sebi-goviin.com",
+      "channel": "email",
+      "risk_score": 92,
+      "verdict": "HIGH_RISK_PHISHING",
+      "flags": [
+        { "type": "typosquatting_domain", "severity": "critical", "detail": "Domain sebi-goviin.com is typosquatting official SEBI portal." }
+      ],
+      "created_at": "2026-07-22T10:00:00.000Z"
+    }
+  ],
+  "threatAlerts": [
+    {
+      "id": 1,
+      "title": "Fake Telegram Stock Tip Group Flagged",
+      "description": "Scammers impersonating SEBI registered research analysts offering 500% guaranteed returns.",
+      "severity": "high",
+      "date": "2026-07-22",
+      "upiId": "invest.now@oksbi",
+      "domain": "sebi-official-tips.xyz"
+    },
+    {
+      "id": 2,
+      "title": "Spoofed Broker Settlement Emails Detected",
+      "description": "Phishing campaign spoofing Zerodha contract notes to steal trading credentials.",
+      "severity": "critical",
+      "date": "2026-07-21",
+      "upiId": "settlement@paytm",
+      "domain": "broker-zerodha.online"
+    }
+  ],
+  "takedowns": [
+    {
+      "id": "CERT-IN-1721642400000",
+      "targetDomain": "sebi-official-tips.xyz",
+      "scamVpa": "invest.now@oksbi",
+      "targetPhone": "+91 9876543210",
+      "threatCategory": "Securities Market Impersonation Fraud",
+      "status": "DISPATCHED_TO_DOT_NPCI",
+      "dotDnsStatus": "BLOCKED_BY_DOT",
+      "npciVpaStatus": "FROZEN_BY_NPCI",
+      "date": "2026-07-22"
+    }
+  ],
+  "registeredCommunications": [],
+  "socialPosts": [
+    {
+      "id": 1,
+      "platform": "Telegram",
+      "author": "@SEBI_VIP_GEMS",
+      "content": "Join our VIP channel for 100% risk-free options trading tips. Contact @admin_sebi.",
+      "riskScore": 95,
+      "flaggedAt": "2026-07-22T11:00:00.000Z"
+    }
+  ]
+}
