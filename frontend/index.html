@@ -985,6 +985,10 @@
           <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
           Phishing Text / URL
         </button>
+        <button class="channel-tab-btn" data-channel="eml" onclick="switchScanChannel('eml')">
+          <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          Upload .EML Email File
+        </button>
         <button class="channel-tab-btn" data-channel="image" onclick="switchScanChannel('image')">
           <svg style="width:14px;height:14px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
           Image Forensics (ELA)
@@ -1022,6 +1026,16 @@
         <button class="action-btn" onclick="runTextScan()">Analyze Text Content</button>
         <button class="ghost-btn" style="margin-left:10px;" onclick="loadTextSample(true)">Load Phishing Sample</button>
         <button class="ghost-btn" onclick="loadTextSample(false)">Load Legit Sample</button>
+      </div>
+
+      <!-- A2. EML channel -->
+      <div class="scan-channel-panel" id="scan-chan-eml" style="display:none;">
+        <div class="drop-zone" onclick="document.getElementById('eml-file-input').click()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          <p>Drag and drop an <b>.EML email file</b> exported from Outlook, Thunderbird, or Webmail, or <b>browse files</b></p>
+          <p style="font-size:11px; margin-top:6px; color:var(--gold-light);">Supported: .EML, .MSG (RFC 822 Email Files)</p>
+        </div>
+        <input type="file" id="eml-file-input" accept=".eml,.msg" style="display:none;" onchange="runEmlScan()">
       </div>
 
       <!-- B. Image channel -->
@@ -1840,6 +1854,57 @@
 
     } catch (e) {
       logBox.innerHTML = `<p style="color:var(--high);">Error connecting to scanner API.</p>`;
+    }
+  }
+
+  // EML Scan
+  async function runEmlScan() {
+    const fileEl = document.getElementById('eml-file-input');
+    const file = fileEl.files[0];
+    if(!file) return;
+
+    setupForensicsLoading();
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res = await fetch(`${CONFIG.apiEndpoint}/phishing/upload-eml`, {
+        method: 'POST',
+        body: fd
+      });
+      const data = await res.json();
+      
+      const scoreVal = document.getElementById('result-score');
+      const labelEl = document.getElementById('result-label-desc');
+      const verdEl = document.getElementById('result-verdict');
+      const headerBar = document.getElementById('verdict-header-bar');
+      const logBox = document.getElementById('evidence-log-container');
+      const previewBox = document.getElementById('media-forensics-views');
+      
+      const analysis = data.analysis || {};
+      scoreVal.innerText = analysis.risk_score || 0;
+      labelEl.innerText = "EML Email Phishing Risk / 100";
+      verdEl.innerText = `${analysis.verdict || 'SAFE'} RISK`;
+      headerBar.className = `verdict-header verd-${(analysis.verdict || 'safe').toLowerCase()}`;
+
+      logBox.innerHTML = `
+        <div class="flag-item" style="border-left: 3px solid var(--gold-light);">
+          <span class="flag-tag">EML MIME HEADERS</span>
+          <p>From: <b>${escapeHtml(data.parsedHeaders?.from || 'Unknown')}</b> | Subject: <b>${escapeHtml(data.parsedHeaders?.subject || 'None')}</b><br>
+          DKIM Signature: <b>${data.parsedHeaders?.dkimSignaturePresent ? '✅ Present' : '❌ Missing'}</b></p>
+        </div>
+      ` + (analysis.flags || []).map(f => `
+        <div class="flag-item">
+          <span class="flag-tag">${escapeHtml(f.type.replace(/_/g, ' '))} · ${escapeHtml(f.severity)}</span>
+          <p>${escapeHtml(f.detail)}</p>
+        </div>
+      `).join('');
+
+      previewBox.innerHTML = '';
+      document.getElementById('scan-result-box').style.display = 'block';
+    } catch (e) {
+      showMediaError();
     }
   }
 

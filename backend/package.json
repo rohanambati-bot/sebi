@@ -1,0 +1,15 @@
+{
+  "name": "sentinel-sebi-backend",
+  "version": "1.0.0",
+  "description": "SentinelSEBI Backend Server for AI Investor Protection Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "multer": "^2.2.0"
+  }
+}
