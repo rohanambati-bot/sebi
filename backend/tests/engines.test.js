@@ -30,9 +30,9 @@ test('100% Dynamic Algorithmic Engine Verification Suite', async (t) => {
     const mockAudioBuffer = Buffer.from('Audio_Frequency_Sample_Buffer_Bytes_For_PCM_ZCR');
     const result = AudioEngine.analyzeAudio(mockAudioBuffer);
 
-    assert.ok(result.spectralFlatness >= 0, 'Spectral Flatness calculated');
+    assert.ok(result.spectralFlatness >= 0, 'FFT Spectral Flatness calculated');
     assert.ok(result.zeroCrossingRate >= 0, 'Zero Crossing Rate calculated');
-    assert.ok(result.model.includes('PCM Sample Zero-Crossing Rate'), 'Honest model descriptor');
+    assert.ok(result.model.includes('1024-point FFT DSP'), 'Uses honest FFT DSP model descriptor');
   });
 
   await t.test('4. Video Engine: MP4 Atom Box Parser & Temporal Frame Delta Analysis', () => {

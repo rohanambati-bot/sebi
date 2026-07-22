@@ -1,0 +1,21 @@
+# ─── SentinelSEBI Docker Compose ─────────────────────────────
+# Launch: docker compose up --build
+# Access: http://localhost:8000
+
+services:
+  sentinel-sebi:
+    build: .
+    container_name: sentinel-sebi
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite database across container restarts
+      - sentinel-data:/app/backend/data
+    environment:
+      - NODE_ENV=production
+      - PORT=8000
+    restart: unless-stopped
+
+volumes:
+  sentinel-data:
+    driver: local

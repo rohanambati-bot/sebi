@@ -1,13 +1,79 @@
 /**
- * SentinelSEBI Image Forensics Engine — Real JPEG Quantization Matrix & EXIF Forensics
+ * SentinelSEBI Image Forensics Engine — Hybrid JS DQT/EXIF + Python OpenCV/MediaPipe/exifread
  * 
- * Features:
- * 1. JPEG Quantization Table (DQT 0xFFDB) Marker Parser: Inspects luminance & chrominance quantization matrices.
- * 2. EXIF Header Forensics: Detects editing & generative AI software signatures.
- * 3. Quantization Error Variance: Measures non-uniform compression scaling typical of spliced/edited images.
+ * Architecture:
+ * 1. Primary: Python ML (OpenCV ELA, MediaPipe Face Mesh, exifread structured EXIF)
+ * 2. Fallback: JS JPEG DQT quantization table parser + string-based EXIF inspection
  */
 
+const { callPythonML } = require('./ml_bridge');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 class MediaEngine {
+
+  /**
+   * Async analysis: tries Python OpenCV + MediaPipe first, falls back to JS DQT.
+   */
+  static async analyzeImageAsync(imageBuffer, originalFilename = '') {
+    const buffer = Buffer.isBuffer(imageBuffer)
+      ? imageBuffer
+      : Buffer.from(String(imageBuffer || '').replace(/^data:image\/\w+;base64,/, ''), 'base64');
+
+    if (!buffer || buffer.length < 50) {
+      return {
+        risk_score: 0,
+        verdict: 'UNABLE_TO_PARSE',
+        elaScore: 0,
+        model: 'Hybrid Image Forensics Engine',
+        analysis: 'Image file too small or invalid buffer.'
+      };
+    }
+
+    // Try Python ML service first
+    try {
+      const ext = path.extname(originalFilename || '.jpg').toLowerCase() || '.jpg';
+      const tempPath = path.join(os.tmpdir(), `sentinel_image_${Date.now()}${ext}`);
+      fs.writeFileSync(tempPath, buffer);
+
+      const mlResult = await callPythonML('image', tempPath);
+
+      // Cleanup
+      try { fs.unlinkSync(tempPath); } catch {}
+
+      if (mlResult.success && !mlResult.fallback) {
+        return {
+          risk_score: mlResult.risk_score || 0,
+          verdict: mlResult.verdict === 'LIKELY_MANIPULATED' ? 'MANIPULATED_SYNTHETIC_IMAGE'
+                 : mlResult.verdict === 'SUSPICIOUS' ? 'SUSPICIOUS_EDITED_MEDIA'
+                 : 'GENUINE_MEDIA',
+          model: `Python ML: ${(mlResult.libraries_used || []).join(' + ')}`,
+          elaScore: mlResult.ela_std ? parseFloat((mlResult.ela_std / 100).toFixed(3)) : 0,
+          elaDetails: {
+            ela_mean: mlResult.ela_mean || null,
+            ela_std: mlResult.ela_std || null,
+          },
+          facesDetected: mlResult.faces_detected ?? null,
+          exifTagCount: mlResult.exif_tag_count ?? null,
+          cameraMake: mlResult.camera_make || null,
+          cameraModel: mlResult.camera_model || null,
+          dimensions: mlResult.dimensions || null,
+          evidence: mlResult.evidence || [],
+          analysis: (mlResult.evidence || []).join(' | ') || 'Python ML image analysis complete.',
+        };
+      }
+    } catch (err) {
+      // Fall through to JS fallback
+    }
+
+    // JS DQT/EXIF fallback
+    return this.analyzeImage(buffer);
+  }
+
+  /**
+   * Synchronous JS-only analysis (fallback). JPEG DQT + EXIF string search.
+   */
   static analyzeImage(imageBuffer) {
     const buffer = Buffer.isBuffer(imageBuffer)
       ? imageBuffer
@@ -18,18 +84,15 @@ class MediaEngine {
         risk_score: 0,
         verdict: 'UNABLE_TO_PARSE',
         elaScore: 0,
+        model: 'JS Fallback: JPEG Quantization & EXIF Signal Analyzer',
         analysis: 'Image file too small or invalid buffer.'
       };
     }
 
-    // 1. Inspect JPEG Define Quantization Table (DQT) markers (0xFFDB)
     const dqtAnalysis = this.analyzeDqtTables(buffer);
-
-    // 2. Inspect EXIF Headers for Software Signatures
     const exifAnalysis = this.inspectExifHeaders(buffer);
 
     let riskScore = Math.min(100, Math.round(dqtAnalysis.varianceScore * 100));
-
     if (exifAnalysis.editingSoftwareDetected) {
       riskScore = Math.max(riskScore, 80);
     }
@@ -41,6 +104,7 @@ class MediaEngine {
     return {
       risk_score: riskScore,
       verdict,
+      model: 'JS Fallback: JPEG Quantization & EXIF Signal Analyzer',
       elaScore: parseFloat(dqtAnalysis.varianceScore.toFixed(3)),
       dqtTablesFound: dqtAnalysis.tablesFound,
       exifData: exifAnalysis.metadata,
@@ -49,9 +113,6 @@ class MediaEngine {
     };
   }
 
-  /**
-   * Parse JPEG DQT markers (0xFF 0xDB) and compute quantization variance across luminance/chrominance tables.
-   */
   static analyzeDqtTables(buffer) {
     let tablesFound = 0;
     let totalDqtValues = 0;
@@ -59,7 +120,6 @@ class MediaEngine {
     let dqtSqSum = 0;
 
     for (let i = 0; i < buffer.length - 4; i++) {
-      // JPEG DQT Marker: 0xFF 0xDB
       if (buffer[i] === 0xFF && buffer[i + 1] === 0xDB) {
         tablesFound++;
         const length = (buffer[i + 2] << 8) | buffer[i + 3];
@@ -75,13 +135,11 @@ class MediaEngine {
     }
 
     if (totalDqtValues === 0) {
-      // Fallback for non-JPEG formats (PNG, WebP): calculate byte entropy variance
       return { tablesFound: 0, varianceScore: this.calculateByteEntropyVariance(buffer) };
     }
 
     const mean = dqtSum / totalDqtValues;
     const variance = (dqtSqSum / totalDqtValues) - (mean * mean);
-    // Normalize variance score
     const varianceScore = Math.min(0.95, Math.max(0.05, Math.sqrt(Math.abs(variance)) / 64));
 
     return { tablesFound, varianceScore };
