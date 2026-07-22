@@ -1,0 +1,9 @@
+{
+  "short_name": "Sentinel",
+  "name": "Sentinel - SEBI Investor Protection Platform",
+  "start_url": "index.html",
+  "background_color": "#090d16",
+  "theme_color": "#d97706",
+  "display": "standalone",
+  "orientation": "portrait"
+}

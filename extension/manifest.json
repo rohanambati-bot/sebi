@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Sentinel - SEBI Investor Protection Link Checker",
+  "version": "1.0.0",
+  "description": "Checks page links and text against the Sentinel authenticity registry to warn of typosquatted domains and unverified communications.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}

@@ -35,6 +35,11 @@ SAMPLES = [
 THRESHOLD = 20  # risk_score >= threshold -> flagged as phishing
 
 def main():
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
     tp = fp = tn = fn = 0
     rows = []
     for text, sender, is_phish in SAMPLES:
@@ -76,7 +81,7 @@ def main():
                   "tuned via ROC analysis.*")
 
     report = "\n".join(lines)
-    with open("../docs/EVALUATION.md", "w") as f:
+    with open("../docs/EVALUATION.md", "w", encoding="utf-8") as f:
         f.write(report)
     print(report)
 

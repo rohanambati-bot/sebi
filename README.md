@@ -76,32 +76,35 @@ performance — see the note at the bottom of that file for how we'd scale it.
 ## 6. What's real vs. roadmap (submitted in good faith)
 
 **Fully functional, running end-to-end in this submission:**
-- Phishing/impersonation heuristic engine with explainable flags
-- Authenticity registry: register, verify-by-code, fuzzy verify-by-content
-- Image forensics: genuine Error Level Analysis + EXIF metadata checks
-- All three wired into a working REST API and browser UI
+- **Persistent SQLite Database:** Full schema for users, scans, alerts, and fraud reports.
+- **PKI Cryptographic verification:** Real RSA-2048 key generation, message private-key signing on registration, and public-key signature verification.
+- **Audio Forensic Engine:** Fast Fourier Transform (FFT) frequency roll-off checks, spectral flatness, and digital silence gating to check for voice clones.
+- **Video Forensic Engine:** OpenCV face detection, Laplacian spatial blur contrast checking, and temporal facial color histogram stability (flicker checks).
+- **QR Certificate Decoder:** Automatic QR code detection and decoding from uploaded image letters using OpenCV.
+- **Phishing/impersonation heuristic engine** with fully explainable risk flags.
+- **Image forensics:** Genuine Error Level Analysis (ELA) + EXIF metadata checks.
+- **Role-based admin console:** SEBI Admins can issue warnings and review reported frauds.
 
-**Round 2 roadmap (not faked, explicitly out of scope for a code-only,
-offline-buildable Round 1):**
-- Voice-call spoof detection (acoustic deepfake classifier, e.g. wav2vec2/ASVspoof-style)
-- Video deepfake detection (frame-level CNN, e.g. fine-tuned on FaceForensics++)
-- Persistent database + issuer admin console (currently in-memory demo registry)
-- Browser/WhatsApp-adjacent extension for one-tap verification
-- Swap heuristic scorers for trained classifiers behind the same API contract
+**Round 2 roadmap (out of scope for code-only, offline MVP):**
+- Browser/WhatsApp-adjacent extension for one-tap verification.
+- Swap heuristic audio/video scorers for trained deep-learning models (like Wave2Vec2 / FaceForensics++ fine-tuned models) behind the same API contracts.
 
 ## 7. Repo layout
 
 ```
 backend/
   main.py                 FastAPI app + routes
+  database.py             SQLite database schema & control
   engines/
     phishing_engine.py    Phishing/impersonation scoring
-    verify_engine.py      Authenticity registry
+    verify_engine.py      Authenticity registry (PKI keys, QR scan)
     media_engine.py       Image forensics (ELA + EXIF)
-  evaluate.py              Detection-performance evaluation script
+    audio_engine.py       Audio spectral voice clone scanner (FFT)
+    video_engine.py       Video temporal/face deepfake scanner (OpenCV)
+  evaluate.py             Detection-performance evaluation script
   requirements.txt
 frontend/
-  index.html               Single-file console UI (no build step)
+  index.html              Single-file console UI (no build step)
 docs/
-  EVALUATION.md             Generated performance report
+  EVALUATION.md           Generated performance report
 ```
