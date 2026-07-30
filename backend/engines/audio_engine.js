@@ -56,6 +56,9 @@ class AudioEngine {
           zeroCrossingRate: mlResult.zero_crossing_rate || 0,
           mfccVariance: mlResult.mfcc_variance || null,
           speakerEmbeddingDims: mlResult.speaker_embedding_dims || null,
+          // Phase 4: the embedding vector itself, for cross-case voiceprint
+          // matching. Treated as biometric data — see correlation_engine.
+          speakerEmbedding: Array.isArray(mlResult.speaker_embedding) ? mlResult.speaker_embedding : null,
           metrics: {
             spectral_rolloff_hz: mlResult.spectral_centroid_mean ? Math.round(mlResult.spectral_centroid_mean * 1.7) : 0,
             spectral_flatness: mlResult.spectral_flatness || 0,

@@ -1257,8 +1257,27 @@
         Generate Section 70B IT Act 2000 CERT-In Incident Notices, Department of Telecommunications (DoT) DNS Block Requests, and NPCI DPIP VPA Account Freeze Directives.
       </p>
 
+      <!-- Correlated Campaign Intelligence (Phase 2) -->
+      <div style="background:rgba(30,41,59,0.4); border:1px solid var(--border-color); border-radius:8px; padding:20px; margin-bottom:24px;">
+        <div class="panel-title" style="margin-bottom:8px;">
+          🕸️ Correlated Campaigns
+          <button class="action-btn" style="font-size:10.5px; padding:6px 12px;" onclick="loadCampaigns()">Refresh Correlation</button>
+        </div>
+        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;">
+          Indicators extracted from submitted artifacts, clustered by shared infrastructure and payment rails.
+          Selecting a campaign issues one notice naming every correlated indicator instead of a single hand-typed target.
+        </p>
+        <div id="campaign-list-container" style="display:flex; flex-direction:column; gap:10px;">
+          <p class="text-secondary" style="font-size:12px;">Loading correlated campaigns...</p>
+        </div>
+      </div>
+
       <div style="background:rgba(30,41,59,0.4); border:1px solid var(--gold-light); border-radius:8px; padding:20px; margin-bottom:24px;">
         <h3 style="font-size:15px; color:var(--gold-light); margin-bottom:12px;">⚖️ Issue 1-Click CERT-In, DoT & NPCI Takedown Order</h3>
+        <div id="selected-campaign-banner" style="display:none; background:rgba(217,119,6,0.15); border:1px solid var(--gold-light); border-radius:6px; padding:10px 12px; margin-bottom:14px; font-size:12px;">
+          <span id="selected-campaign-text"></span>
+          <button class="action-btn" style="font-size:10px; padding:4px 10px; margin-left:10px;" onclick="clearSelectedCampaign()">Clear</button>
+        </div>
         <div class="form-row">
           <div>
             <label>Phishing Domain for DoT DNS Blocking</label>
@@ -1528,6 +1547,121 @@
     username: 'investor'
   };
 
+  // ─────────────────── Session & Authenticated Requests ───────────────────
+  //
+  // Privileged endpoints (regulatory reports, alert publishing, PKI registry,
+  // audit trail) now require an admin bearer token. Scan and verify endpoints
+  // stay open so investors can use the tooling without an account.
+
+  const SESSION_KEY = 'sentinel_session';
+
+  const Session = {
+    get() {
+      try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || null; }
+      catch { return null; }
+    },
+    set(session) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); },
+    clear() { sessionStorage.removeItem(SESSION_KEY); },
+    get token() { return this.get()?.access_token || null; },
+    get role() { return this.get()?.role || 'anonymous'; },
+    isAdmin() { return this.role === 'admin'; }
+  };
+
+  /**
+   * fetch wrapper that attaches the bearer token and surfaces auth failures
+   * as readable toasts rather than silent empty renders.
+   */
+  async function apiFetch(endpoint, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    const token = Session.token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${CONFIG.apiEndpoint}${endpoint}`, { ...options, headers });
+
+    if (res.status === 401) {
+      Session.clear();
+      updateAuthUI();
+      showToast('Session expired or not signed in. Sign in as a SEBI administrator to continue.');
+      throw new Error('UNAUTHENTICATED');
+    }
+    if (res.status === 403) {
+      showToast('This action requires SEBI administrator privileges.');
+      throw new Error('FORBIDDEN');
+    }
+    return res;
+  }
+
+  /** JSON POST helper for privileged actions. */
+  function apiPostJson(endpoint, body) {
+    return apiFetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  async function signIn(username, password) {
+    const res = await fetch(`${CONFIG.apiEndpoint}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!res.ok) {
+      showToast('Sign-in failed. Check your credentials.');
+      return false;
+    }
+
+    const session = await res.json();
+    Session.set(session);
+    CONFIG.currentRole = session.role;
+    CONFIG.username = session.username;
+    updateAuthUI();
+    showToast(`Signed in as ${session.username} (${session.role}).`);
+    return true;
+  }
+
+  function signOut() {
+    Session.clear();
+    CONFIG.currentRole = 'investor';
+    CONFIG.username = 'investor';
+    updateAuthUI();
+    showToast('Signed out.');
+  }
+
+  /** Reflect session state in the profile badge. */
+  function updateAuthUI() {
+    const session = Session.get();
+    const name = session ? session.username : 'investor';
+    const roleLabel = session
+      ? (session.role === 'admin' ? 'SEBI Administrator' : 'Retail Investor')
+      : 'Retail Investor (not signed in)';
+
+    const nameEl = document.getElementById('profile-username');
+    const roleEl = document.getElementById('profile-role');
+    const avatarEl = document.getElementById('avatar-char');
+    if (nameEl) nameEl.innerText = name;
+    if (roleEl) roleEl.innerText = roleLabel;
+    if (avatarEl) avatarEl.innerText = name.charAt(0).toUpperCase();
+  }
+
+  /** Prompt for credentials when a privileged action needs a token. */
+  async function ensureAdmin() {
+    if (Session.isAdmin()) return true;
+
+    const username = prompt('SEBI administrator username:');
+    if (!username) return false;
+    const password = prompt(`Password for ${username}:`);
+    if (!password) return false;
+
+    const ok = await signIn(username, password);
+    if (ok && !Session.isAdmin()) {
+      showToast('That account does not have administrator privileges.');
+      return false;
+    }
+    return ok;
+  }
+
   // Global variables
   let threatChartInstance = null;
   let activeScanChannel = 'text';
@@ -1633,6 +1767,7 @@
       titleEl.innerText = "Reports Queue";
       descEl.innerText = "SEBI Admin queue to review auto-reported incidents and take regulatory actions.";
       loadReports();
+      loadCampaigns();
     } else if (tabId === 'social') {
       titleEl.innerText = "Social Media Monitor";
       descEl.innerText = "Sentinel public channels scraper feed scanning Twitter and Telegram for broker scams.";
@@ -1686,15 +1821,23 @@
   }
 
   // Role Toggler
+  //
+  // This only reveals or hides UI surface. It grants no privilege: the backend
+  // authorizes every privileged action from the bearer token, so switching to
+  // the admin view without signing in still yields 401/403 on the API.
   function toggleRole(role) {
     CONFIG.currentRole = role;
     CONFIG.username = role === 'sebi_admin' ? 'sebi_admin' : 'investor';
-    
+
     // Update user badge
     document.getElementById('profile-username').innerText = CONFIG.username;
     document.getElementById('profile-role').innerText = role === 'sebi_admin' ? 'SEBI Administrator' : 'Retail Investor';
     document.getElementById('avatar-char').innerText = role === 'sebi_admin' ? 'S' : 'I';
     document.getElementById('meta-role-display').innerText = role === 'sebi_admin' ? 'SEBI Admin' : 'Investor';
+
+    if (role === 'sebi_admin' && !Session.isAdmin()) {
+      showToast('Admin view enabled. Privileged actions will prompt for sign-in.');
+    }
 
     // Show/hide SEBI only buttons/panels
     const sebiBtn = document.querySelector('.nav-btn.sebi-only');
@@ -2122,12 +2265,15 @@
     outBox.innerHTML = '<p class="text-secondary">Generating RSA 2048 keys and applying private key signature...</p>';
     outBox.style.display = 'block';
 
+    // Registering an official communication asserts authenticity on an
+    // issuer's behalf, so the backend requires an admin token.
+    if (!(await ensureAdmin())) {
+      outBox.innerHTML = '<p class="text-secondary">Administrator sign-in required to register official communications.</p>';
+      return;
+    }
+
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/verify/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issuer, channel, content })
-      });
+      const res = await apiPostJson('/verify/register', { issuer, channel, content });
       const data = await res.json();
       
       const verificationUrl = `${CONFIG.apiEndpoint}/verify/qr?code=${data.verify_code}`;
@@ -2339,14 +2485,13 @@
 
     if(!title.trim() || !description.trim()) { showToast("Please input alert fields."); return; }
 
+    // Publishing a public warning names a domain/handle as fraudulent.
+    if (!(await ensureAdmin())) return;
+
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/alerts/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, description, severity })
-      });
+      const res = await apiPostJson('/alerts/create', { title, category, description, severity });
       const data = await res.json();
-      if(data.status === 'success') {
+      if (data.success || data.status === 'success') {
         showToast("Public Warning Broadcasted successfully!");
         document.getElementById('new-alert-title').value = '';
         document.getElementById('new-alert-desc').value = '';
@@ -2362,21 +2507,28 @@
     const targetPhone = document.getElementById('takedown-phone-input').value;
     const threatCategory = document.getElementById('takedown-category-select').value;
 
-    if (!targetDomain && !scamVpa && !targetPhone) {
-      showToast("Please enter a Domain, UPI VPA, or Phone/Telegram channel for takedown.");
+    // A selected campaign supplies the full indicator set, so manual fields
+    // are only required when no campaign is chosen.
+    if (!selectedCampaignId && !targetDomain && !scamVpa && !targetPhone) {
+      showToast("Enter a Domain, UPI VPA, or Phone/Telegram channel — or select a correlated campaign above.");
       return;
     }
 
+    // Generates a legal notice citing IT Act s.70B — must be attributable.
+    if (!(await ensureAdmin())) return;
+
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/reports/cert-in-takedown`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetDomain, scamVpa, targetPhone, threatCategory })
+      const res = await apiPostJson('/reports/cert-in-takedown', {
+        targetDomain, scamVpa, targetPhone, threatCategory,
+        campaignId: selectedCampaignId || undefined
       });
       const data = await res.json();
 
       if (data.success) {
-        showToast("CERT-In, DoT & NPCI Takedown Directives Dispatched!");
+        const correlated = data.correlatedIndicators;
+        showToast(correlated
+          ? `Notice dispatched naming ${correlated.total} correlated indicators from campaign #${correlated.campaignId}.`
+          : "CERT-In, DoT & NPCI Takedown Directives Dispatched!");
         document.getElementById('takedown-notice-container').style.display = 'block';
         document.getElementById('takedown-notice-text').innerText = data.legalNoticeText;
         loadReports();
@@ -2428,13 +2580,126 @@
     } catch(e) {}
   }
 
-  async function changeReportStatus(reportId, newStatus) {
+  // ─────────────── Phase 2: Correlated Campaign Intelligence ───────────────
+
+  let selectedCampaignId = null;
+
+  async function loadCampaigns() {
+    const container = document.getElementById('campaign-list-container');
+    if (!container) return;
+
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/reports/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: reportId, status: newStatus })
+      const [campRes, statsRes] = await Promise.all([
+        fetch(`${CONFIG.apiEndpoint}/graph/campaigns`),
+        fetch(`${CONFIG.apiEndpoint}/graph/stats`)
+      ]);
+      const campaigns = (await campRes.json()).campaigns || [];
+      const stats = await statsRes.json();
+
+      const statLine = `<p style="font-size:11px; color:var(--text-secondary); font-family:var(--font-mono); margin-bottom:10px;">
+        ${stats.iocCount} indicators · ${stats.linkCount} correlation edges · ${stats.campaignCount} campaigns
+      </p>`;
+
+      if (campaigns.length === 0) {
+        container.innerHTML = statLine + `<p class="text-secondary" style="font-size:12px;">
+          No correlated campaigns yet. Scan two or more artifacts that share a domain, UPI handle, or phone number to build correlations.
+        </p>`;
+        return;
+      }
+
+      container.innerHTML = statLine + campaigns.map(c => {
+        const riskColor = c.max_risk_score >= 70 ? 'var(--high)' : (c.max_risk_score >= 30 ? 'var(--medium)' : 'var(--low)');
+        const isSelected = String(selectedCampaignId) === String(c.id);
+        return `
+          <div style="background:rgba(15,23,42,0.6); border:1px solid ${isSelected ? 'var(--gold-light)' : 'var(--border-color)'}; border-radius:6px; padding:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+              <div style="min-width:0;">
+                <b style="font-size:13px; word-break:break-all;">${escapeHtml(c.label)}</b>
+                <div style="font-size:11px; color:var(--text-secondary); margin-top:4px; font-family:var(--font-mono);">
+                  ${c.member_count} indicators · peak risk
+                  <span style="color:${riskColor};">${c.max_risk_score}</span>
+                  · ${escapeHtml(c.cluster_method)}
+                </div>
+              </div>
+              <div style="display:flex; gap:6px; flex-shrink:0;">
+                <button class="action-btn" style="font-size:10px; padding:5px 10px;" onclick="viewCampaign(${c.id})">Inspect</button>
+                <button class="action-btn" style="font-size:10px; padding:5px 10px;" onclick="selectCampaignForTakedown(${c.id}, '${escapeHtml(c.label).replace(/'/g, "\\'")}')">Use for Notice</button>
+              </div>
+            </div>
+            <div id="campaign-detail-${c.id}" style="display:none; margin-top:10px; border-top:1px solid var(--border-color); padding-top:10px;"></div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<p class="text-secondary" style="font-size:12px;">Could not load campaign correlations.</p>';
+    }
+  }
+
+  async function viewCampaign(id) {
+    const box = document.getElementById(`campaign-detail-${id}`);
+    if (!box) return;
+
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+
+    box.style.display = 'block';
+    box.innerHTML = '<p class="text-secondary" style="font-size:11px;">Loading indicators...</p>';
+
+    try {
+      const res = await fetch(`${CONFIG.apiEndpoint}/graph/campaigns/${id}`);
+      const data = await res.json();
+
+      // Group indicators by type so the operator sees payment rails separately
+      // from infrastructure — they go to different agencies.
+      const grouped = {};
+      (data.members || []).forEach(m => {
+        (grouped[m.type] = grouped[m.type] || []).push(m);
       });
+
+      const memberHtml = Object.entries(grouped).map(([type, items]) => `
+        <div style="margin-bottom:8px;">
+          <span style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">${escapeHtml(type)}</span>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;">
+            ${items.map(m => `<span class="code-chip" style="font-size:10px;">${escapeHtml(m.value)} <span style="color:var(--text-secondary);">×${m.sighting_count}</span></span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+
+      const scanHtml = (data.scans || []).length
+        ? `<div style="margin-top:8px; font-size:11px; color:var(--text-secondary); font-family:var(--font-mono);">
+             Evidenced by ${data.scans.length} scan(s): ${data.scans.slice(0, 8).map(s => `#${s.id}`).join(', ')}${data.scans.length > 8 ? '…' : ''}
+           </div>`
+        : '';
+
+      box.innerHTML = memberHtml + scanHtml;
+    } catch (e) {
+      box.innerHTML = '<p class="text-secondary" style="font-size:11px;">Failed to load campaign detail.</p>';
+    }
+  }
+
+  function selectCampaignForTakedown(id, label) {
+    selectedCampaignId = id;
+    const banner = document.getElementById('selected-campaign-banner');
+    const text = document.getElementById('selected-campaign-text');
+    if (banner && text) {
+      text.innerHTML = `Notice will name <b>all indicators</b> in campaign #${id}: ${escapeHtml(label)}`;
+      banner.style.display = 'block';
+    }
+    showToast(`Campaign #${id} selected. The notice will enumerate every correlated indicator.`);
+    loadCampaigns();
+  }
+
+  function clearSelectedCampaign() {
+    selectedCampaignId = null;
+    const banner = document.getElementById('selected-campaign-banner');
+    if (banner) banner.style.display = 'none';
+    loadCampaigns();
+  }
+
+  async function changeReportStatus(reportId, newStatus) {
+    if (!(await ensureAdmin())) return;
+
+    try {
+      await apiPostJson('/reports/status', { id: reportId, status: newStatus });
       showToast("Incident status updated.");
       loadReports();
     } catch(e) {}
@@ -2458,33 +2723,29 @@
     }
 
     container.innerHTML = posts.map(p => {
-      const timeStr = new Date(p.created_at * 1000).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+      const ts = p.flagged_at || p.created_at || '';
+      const timeStr = ts ? new Date(ts).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) : '';
       const riskClass = p.risk_score >= 70 ? 'crit' : (p.risk_score >= 30 ? 'warn' : 'info');
       const scoreColor = p.risk_score >= 70 ? 'var(--high)' : (p.risk_score >= 30 ? 'var(--medium)' : 'var(--low)');
-      
-      let flagDetails = '';
-      if(p.explanation && p.explanation.length > 0) {
-        flagDetails = `<div style="font-size:11.5px; color:var(--text-secondary); margin-top:8px; border-left:2px solid var(--border-color); padding-left:10px; font-family:var(--font-mono);">
-          <b>Scan Flags:</b> ${p.explanation.map(f => escapeHtml(f.detail)).join('; ')}
-        </div>`;
-      }
+      const platform = p.platform || 'Unknown';
+      const author = p.author || p.sender || 'Unknown';
+      const content = p.content || p.text_or_filename || '';
 
       return `
         <div style="background:rgba(30,41,59,0.3); border:1px solid var(--border-color); border-radius:8px; padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <div class="avatar" style="width:24px; height:24px; font-size:10px; background:var(--border-color); color:var(--text-primary);">S</div>
+              <div class="avatar" style="width:24px; height:24px; font-size:10px; background:var(--border-color); color:var(--text-primary);">${platform.charAt(0).toUpperCase()}</div>
               <div>
-                <b style="font-size:13px;">${escapeHtml(p.sender)}</b>
-                <span style="font-size:10px; color:var(--text-secondary); margin-left:6px;">${timeStr}</span>
+                <b style="font-size:13px;">${escapeHtml(author)}</b>
+                <span style="font-size:10px; color:var(--text-secondary); margin-left:6px;">${escapeHtml(platform)} · ${timeStr}</span>
               </div>
             </div>
             <div style="text-align:right;">
-              <span class="code-chip" style="color:${scoreColor}; border-color:${scoreColor}; font-size:10px;">Risk Score: ${p.risk_score}</span>
+              <span class="code-chip" style="color:${scoreColor}; border-color:${scoreColor}; font-size:10px;">Risk: ${p.risk_score}</span>
             </div>
           </div>
-          <p style="font-size:13px; line-height:1.5; color:var(--text-primary); font-family:var(--font-mono);">${escapeHtml(p.text_or_filename)}</p>
-          ${flagDetails}
+          <p style="font-size:13px; line-height:1.5; color:var(--text-primary); font-family:var(--font-mono);">${escapeHtml(content)}</p>
         </div>
       `;
     }).join('');
@@ -2492,22 +2753,27 @@
 
   // Ingest new social media posts
   async function simulateSocialIngest() {
+    if (!(await ensureAdmin())) return;
+
     showToast("Scraping channels & evaluating post payloads...");
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/social/ingest`, { method: 'POST' });
+      const res = await apiFetch('/social/ingest', { method: 'POST' });
       const data = await res.json();
-      showToast(`Scanned post from ${data.sender}. Verdict: ${data.verdict}`);
+      const post = data.post || {};
+      showToast(`Ingested post from ${post.author || 'unknown channel'} on ${post.platform || 'platform'}.`);
       loadSocialFeed();
     } catch(e) {
-      showToast("Ingestion failed.");
+      if (e.message !== 'UNAUTHENTICATED' && e.message !== 'FORBIDDEN') showToast("Ingestion failed.");
     }
   }
 
   // Diagnostics database wipe
   async function triggerDatabaseReset() {
     if(!confirm("Wipe SQLite database and seed default communications and alerts?")) return;
+    if (!(await ensureAdmin())) return;
+
     try {
-      const res = await fetch(`${CONFIG.apiEndpoint}/system/reset`, { method: 'POST' });
+      await apiFetch('/system/reset', { method: 'POST' });
       showToast("SQLite database reset complete!");
       loadRegistry();
       loadDashboard();

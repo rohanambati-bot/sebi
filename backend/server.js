@@ -12,10 +12,11 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const multer = require('multer');
 
 const DBSqlite = require('./db_sqlite');
+const { signToken, attachUser, requireAuth, requireRole } = require('./auth');
+const Evidence = require('./evidence');
 
 // Import Algorithmic Engines
 const PhishingEngine = require('./engines/phishing_engine');
@@ -24,11 +25,25 @@ const AudioEngine = require('./engines/audio_engine');
 const VideoEngine = require('./engines/video_engine');
 const verifyEngine = require('./engines/verify_engine');
 const EMLParser = require('./engines/eml_parser');
+const GraphEngine = require('./engines/graph_engine');
+const CorrelationEngine = require('./engines/correlation_engine');
+const { ExportEngine } = require('./engines/export_engine');
+const EnrichmentQueue = require('./enrichment_queue');
+const NetGuard = require('./net_guard');
 const { checkMLStatus } = require('./engines/ml_bridge');
 
 const app = express();
 const upload = multer({ limits: { fileSize: 50 * 1024 * 1024 } });
-const JWT_SECRET = process.env.JWT_SECRET || 'sentinel_sebi_jwt_secret_key_2026_production_secure';
+
+// Phase 3: enrichment runs off the request path. Disabled unless
+// SENTINEL_ENRICHMENT_ENABLED=true, because fetching attacker infrastructure
+// from the analysis host reveals investigation activity.
+const enrichmentQueue = new EnrichmentQueue(DBSqlite);
+
+// Trust one reverse-proxy hop so req.ip reflects the client rather than the
+// proxy. Left at 1 deliberately: trusting the whole X-Forwarded-For chain lets
+// a client forge its own source IP in the audit log.
+app.set('trust proxy', 1);
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -38,17 +53,95 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/extension', express.static(path.join(__dirname, '../extension')));
 
-// JWT Token Middleware Helper
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ detail: 'Access token required' });
+/**
+ * Request context: resolve the caller (anonymous when no token) and capture the
+ * network provenance every audit entry and scan row needs.
+ */
+app.use(attachUser);
+app.use((req, res, next) => {
+  req.context = {
+    sourceIp: req.ip || req.socket?.remoteAddress || null,
+    userAgent: req.headers['user-agent'] || null,
+  };
+  next();
+});
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ detail: 'Invalid or expired token' });
-    req.user = user;
-    next();
+/**
+ * Record an action in the tamper-evident audit log.
+ * Fire-and-forget: appendAudit never rejects, so a logging fault cannot fail
+ * an otherwise successful request.
+ */
+function audit(req, action, { targetType, targetId, outcome = 'SUCCESS', metadata } = {}) {
+  return DBSqlite.appendAudit({
+    actor_id: req.user?.id ?? null,
+    actor_username: req.user?.username,
+    actor_role: req.user?.role,
+    action,
+    target_type: targetType,
+    target_id: targetId,
+    outcome,
+    source_ip: req.context?.sourceIp,
+    user_agent: req.context?.userAgent,
+    metadata,
   });
+}
+
+/** Attribution fields stamped onto every persisted scan row. */
+function actorFields(req) {
+  return {
+    user_id: req.user?.id ?? null,
+    source_ip: req.context?.sourceIp ?? null,
+  };
+}
+
+/**
+ * Phase 2: feed a completed scan's indicators into the IOC graph.
+ *
+ * Fire-and-forget. Graph ingestion must never delay or fail the scan response —
+ * the verdict is the product, the graph is derived context. Failures are logged
+ * inside ingestScanGraph rather than surfaced.
+ */
+function ingestGraph(scanId, { analysis, forensics }) {
+  // A null scanId means the scan row itself was not written. Surfacing that is
+  // important: a silently failed addScan previously produced an empty IOC graph
+  // with no error anywhere, which is the hardest class of bug to notice.
+  if (!scanId) {
+    console.error('[graph] skipping ingestion: no scan id (the scan row failed to persist)');
+    return;
+  }
+
+  const { nodes, edges } = GraphEngine.buildScanGraph({
+    iocs: analysis?.iocs || [],
+    domains: analysis?.domains || [],
+    senderDomain: analysis?.senderDomain || null,
+    originatingIp: forensics?.originatingIp || null,
+    riskScore: analysis?.risk_score || 0,
+  });
+
+  if (nodes.length === 0) return;
+
+  DBSqlite.ingestScanGraph({ scanId, nodes, edges }).then(() => {
+    // Clustering is only meaningful once edges exist, and one new edge can
+    // merge two previously separate campaigns, so recompute after each ingest.
+    DBSqlite.rebuildCampaigns(() => {});
+  });
+
+  // Phase 3: queue domain enrichment. Async and non-blocking — the verdict has
+  // already been returned by the time this runs.
+  for (const node of nodes) {
+    if (node.type === 'domain' || node.type === 'sender_domain') {
+      enrichmentQueue.enqueueDomain(node.value);
+    }
+  }
+
+  // Phase 4: store a template fingerprint so a reused scam kit is detectable
+  // across otherwise unconnected reports.
+  if (analysis?.full_text || analysis?.templateSource) {
+    const fingerprint = CorrelationEngine.templateFingerprint(analysis.templateSource || analysis.full_text);
+    if (fingerprint) {
+      DBSqlite.addFingerprint({ scanId, kind: 'template', hashValue: fingerprint });
+    }
+  }
 }
 
 // 1. CRYPTOGRAPHIC AUTHENTICATION & JWT (PBKDF2 HASH VERIFICATION)
@@ -60,16 +153,56 @@ app.post('/auth/login', (req, res) => {
 
   DBSqlite.getUserByUsername(username, (err, user) => {
     if (err || !user) {
-      return res.status(401).json({ detail: 'Invalid credentials. User not found.' });
+      audit(req, 'AUTH_LOGIN', {
+        targetType: 'user', targetId: username, outcome: 'FAILURE',
+        metadata: { reason: 'user_not_found' },
+      });
+      // Same message for both failure modes — distinguishing them lets an
+      // attacker enumerate valid usernames.
+      return res.status(401).json({ detail: 'Invalid credentials.' });
     }
 
-    const hash = crypto.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512').toString('hex');
-    if (hash !== user.password_hash) {
-      return res.status(401).json({ detail: 'Invalid password' });
+    // A row missing salt/hash means an incomplete schema migration. Treat it as
+    // an auth failure rather than letting pbkdf2Sync throw — an uncaught throw
+    // here crashes the process and is remotely triggerable without credentials.
+    if (!user.salt || !user.password_hash) {
+      console.error(`[auth] user "${user.username}" has no salt/password_hash; schema migration incomplete`);
+      audit(req, 'AUTH_LOGIN', {
+        targetType: 'user', targetId: user.username, outcome: 'FAILURE',
+        metadata: { reason: 'credential_record_malformed' },
+      });
+      return res.status(401).json({ detail: 'Invalid credentials.' });
     }
 
-    const payload = { id: user.id, username: user.username, role: user.role };
-    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+    let passwordValid = false;
+    try {
+      const hash = crypto.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512').toString('hex');
+
+      // timingSafeEqual needs equal-length inputs; hex digests of the same
+      // algorithm always match in length, so a mismatch means a malformed row.
+      const stored = Buffer.from(user.password_hash, 'utf8');
+      const computed = Buffer.from(hash, 'utf8');
+      passwordValid =
+        stored.length === computed.length && crypto.timingSafeEqual(stored, computed);
+    } catch (hashErr) {
+      console.error(`[auth] password verification error for "${user.username}": ${hashErr.message}`);
+      return res.status(401).json({ detail: 'Invalid credentials.' });
+    }
+
+    if (!passwordValid) {
+      audit(req, 'AUTH_LOGIN', {
+        targetType: 'user', targetId: user.username, outcome: 'FAILURE',
+        metadata: { reason: 'bad_password' },
+      });
+      return res.status(401).json({ detail: 'Invalid credentials.' });
+    }
+
+    const accessToken = signToken(user);
+
+    audit(req, 'AUTH_LOGIN', {
+      targetType: 'user', targetId: user.username, outcome: 'SUCCESS',
+      metadata: { role: user.role },
+    });
 
     res.json({
       access_token: accessToken,
@@ -79,6 +212,11 @@ app.post('/auth/login', (req, res) => {
       authenticatedAt: new Date().toISOString()
     });
   });
+});
+
+// Current session identity — lets the console restore state after a reload.
+app.get('/auth/me', requireAuth, (req, res) => {
+  res.json({ id: req.user.id, username: req.user.username, role: req.user.role });
 });
 
 // 2. PHISHING ENGINE & EML UPLOAD
@@ -93,6 +231,8 @@ app.post('/phishing/analyze', (req, res) => {
 
   DBSqlite.addScan({
     content_type: 'text',
+    // text_or_filename remains a short label for list views; full_text below
+    // is Phase 1 item 1C — the previous 120-char truncation destroyed evidence.
     text_or_filename: text.slice(0, 120),
     sender: sender || 'Unknown',
     channel: channel || 'email',
@@ -100,7 +240,18 @@ app.post('/phishing/analyze', (req, res) => {
     verdict: result.verdict,
     flags: result.flags,
     created_at: new Date().toISOString(),
+    full_text: text,
+    iocs: result.iocs,
+    ...actorFields(req),
   }, (err, id) => {
+    audit(req, 'SCAN_TEXT', {
+      targetType: 'scan', targetId: id,
+      metadata: {
+        verdict: result.verdict, risk_score: result.risk_score, channel: result.channel,
+        domains: result.domains, iocCount: (result.iocs || []).length,
+      },
+    });
+    ingestGraph(id, { analysis: { ...result, templateSource: text } });
     res.json(result);
   });
 });
@@ -108,6 +259,10 @@ app.post('/phishing/analyze', (req, res) => {
 app.post('/phishing/upload-eml', upload.single('file'), async (req, res) => {
   const fileBuffer = req.file ? req.file.buffer : Buffer.from(req.body.emlContent || '', 'utf8');
   const fileName = req.file ? req.file.originalname : (req.body.fileName || 'email.eml');
+
+  // Retain and hash the raw upload before any analysis touches it, so the
+  // stored hash provably describes the bytes that were parsed below.
+  const retained = Evidence.retain(fileBuffer, { mimeType: 'message/rfc822', originalFilename: fileName });
 
   // Try async mailparser first, fall back to sync parser
   let parsedEml;
@@ -171,21 +326,69 @@ app.post('/phishing/upload-eml', upload.single('file'), async (req, res) => {
     verdict: analysis.verdict,
     flags: analysis.flags,
     created_at: new Date().toISOString(),
-  }, () => {
+    full_text: parsedEml.bodyText,
+    forensics: parsedEml.headers, // includes receivedChain, originatingIp, authResults, etc.
+    iocs: analysis.iocs,
+    evidence_sha256: retained.sha256,
+    ...actorFields(req),
+  }, (err, id) => {
+    audit(req, 'SCAN_EML', {
+      targetType: 'scan', targetId: id,
+      metadata: {
+        fileName,
+        sender: parsedEml.headers.from,
+        verdict: analysis.verdict,
+        risk_score: analysis.risk_score,
+        dkim: dkimStatus,
+        originatingIp: parsedEml.headers.originatingIp,
+        sha256: retained.sha256,
+      },
+    });
+
+    DBSqlite.addEvidenceArtifact({
+      scan_id: id,
+      sha256: retained.sha256,
+      md5: retained.md5,
+      size_bytes: retained.sizeBytes,
+      mime_type: retained.mimeType,
+      original_filename: retained.originalFilename,
+      stored_path: retained.storedPath,
+      ...actorFields(req),
+    });
+
+    ingestGraph(id, {
+      analysis: { ...analysis, templateSource: parsedEml.bodyText },
+      forensics: parsedEml.headers,
+    });
+
     res.json({
       success: true,
       fileName,
       parsedHeaders: parsedEml.headers,
+      attachments: parsedEml.attachments || [],
       encryptionStatus: parsedEml.encryptionStatus,
       analysis,
+      evidence: { sha256: retained.sha256, md5: retained.md5, sizeBytes: retained.sizeBytes },
     });
   });
 });
+
+/**
+ * Retain and record an evidence artifact for an uploaded file, then attach the
+ * resulting hash to the audit metadata. No-op (returns null) when the request
+ * did not include a real file upload (e.g. a body-embedded fallback input),
+ * since there is nothing well-formed to hash in that path.
+ */
+function retainUploadEvidence(req, mimeType, fileName) {
+  if (!req.file || !req.file.buffer) return null;
+  return Evidence.retain(req.file.buffer, { mimeType, originalFilename: fileName });
+}
 
 // 3. MEDIA FORENSICS (IMAGE, AUDIO, VIDEO)
 app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
   const imageInput = req.file ? req.file.buffer : (req.body.image || req.body.file || req.body);
   const fileName = req.file ? req.file.originalname : 'uploaded_image.jpg';
+  const retained = retainUploadEvidence(req, req.file?.mimetype || 'image/jpeg', fileName);
 
   // Try Python ML (OpenCV + MediaPipe + exifread), fall back to JS DQT
   let result;
@@ -204,11 +407,37 @@ app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
     verdict: result.verdict,
     flags: [{ type: 'image_forensics', severity: result.risk_score > 60 ? 'high' : 'low', detail: result.analysis || '' }],
     created_at: new Date().toISOString(),
-  }, () => {
+    evidence_sha256: retained?.sha256 ?? null,
+    ...actorFields(req),
+  }, (err, id) => {
+    audit(req, 'SCAN_IMAGE', {
+      targetType: 'scan', targetId: id,
+      metadata: { fileName, verdict: result.verdict, risk_score: result.risk_score, model: result.model, sha256: retained?.sha256 },
+    });
+    if (retained) {
+      DBSqlite.addEvidenceArtifact({
+        scan_id: id, sha256: retained.sha256, md5: retained.md5, size_bytes: retained.sizeBytes,
+        mime_type: retained.mimeType, original_filename: retained.originalFilename, stored_path: retained.storedPath,
+        ...actorFields(req),
+      });
+    }
+
+    // Phase 4: perceptual hash so a reused doctored image (e.g. a fake SEBI
+    // letterhead) is matched even when re-encoded, which SHA-256 cannot do.
+    let perceptualHash = null;
+    if (req.file?.buffer) {
+      const grid = CorrelationEngine.approximateGridFromBuffer(req.file.buffer);
+      perceptualHash = grid ? CorrelationEngine.dHashFromGrid(grid, 9, 8) : null;
+      if (perceptualHash) {
+        DBSqlite.addFingerprint({ scanId: id, kind: 'phash', hashValue: perceptualHash });
+      }
+    }
+
     res.json({
       risk_score: result.risk_score,
       verdict: result.verdict,
       model: result.model,
+      perceptualHash,
       evidence: result.evidence || [
         `JPEG DQT Quantization Table variance score: ${result.elaScore}`,
         result.editingSoftwareDetected ? `EXIF metadata flagged editing tool` : 'EXIF metadata matches standard camera hardware.'
@@ -218,6 +447,7 @@ app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
       dimensions: result.dimensions || null,
       exifData: result.exifData || null,
       preview_url: '/assets/ela_sample.png',
+      custody: retained ? { sha256: retained.sha256, md5: retained.md5 } : null,
     });
   });
 });
@@ -225,6 +455,7 @@ app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
 app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
   const audioInput = req.file ? req.file.buffer : (req.body.audio || req.body.file || req.body);
   const fileName = req.file ? req.file.originalname : 'uploaded_audio.wav';
+  const retained = retainUploadEvidence(req, req.file?.mimetype || 'audio/wav', fileName);
 
   // Try Python ML (librosa + resemblyzer), fall back to JS FFT
   let result;
@@ -243,7 +474,31 @@ app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
     verdict: result.verdict,
     flags: [{ type: 'audio_forensics', severity: result.risk_score > 60 ? 'high' : 'low', detail: result.analysis || '' }],
     created_at: new Date().toISOString(),
-  }, () => {
+    evidence_sha256: retained?.sha256 ?? null,
+    ...actorFields(req),
+  }, (err, id) => {
+    audit(req, 'SCAN_AUDIO', {
+      targetType: 'scan', targetId: id,
+      metadata: { fileName, verdict: result.verdict, risk_score: result.risk_score, model: result.model, sha256: retained?.sha256 },
+    });
+    if (retained) {
+      DBSqlite.addEvidenceArtifact({
+        scan_id: id, sha256: retained.sha256, md5: retained.md5, size_bytes: retained.sizeBytes,
+        mime_type: retained.mimeType, original_filename: retained.originalFilename, stored_path: retained.storedPath,
+        ...actorFields(req),
+      });
+    }
+
+    // Phase 4: persist the speaker embedding so the same voice can be matched
+    // across unrelated victim reports. Previously computed and discarded.
+    if (Array.isArray(result.speakerEmbedding) && result.speakerEmbedding.length > 0) {
+      DBSqlite.addFingerprint({
+        scanId: id, kind: 'voiceprint',
+        vector: result.speakerEmbedding,
+        dimensions: result.speakerEmbedding.length,
+      });
+    }
+
     res.json({
       risk_score: result.risk_score,
       verdict: result.verdict,
@@ -253,7 +508,9 @@ app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
         `Zero-Crossing Rate (ZCR): ${result.zeroCrossingRate}`,
         result.analysis
       ],
-      metrics: result.metrics
+      metrics: result.metrics,
+      custody: retained ? { sha256: retained.sha256, md5: retained.md5 } : null,
+      voiceprintStored: Array.isArray(result.speakerEmbedding) && result.speakerEmbedding.length > 0,
     });
   });
 });
@@ -261,6 +518,7 @@ app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
 app.post('/media/analyze-video', upload.single('file'), async (req, res) => {
   const videoInput = req.file ? req.file.buffer : (req.body.video || req.body.file || req.body);
   const fileName = req.file ? req.file.originalname : 'uploaded_video.mp4';
+  const retained = retainUploadEvidence(req, req.file?.mimetype || 'video/mp4', fileName);
 
   // Try Python ML (OpenCV + MediaPipe temporal face mesh), fall back to JS MP4 parser
   let result;
@@ -279,11 +537,25 @@ app.post('/media/analyze-video', upload.single('file'), async (req, res) => {
     verdict: result.verdict,
     flags: [{ type: 'video_forensics', severity: result.risk_score > 60 ? 'high' : 'low', detail: result.analysis || '' }],
     created_at: new Date().toISOString(),
-  }, () => {
+    evidence_sha256: retained?.sha256 ?? null,
+    ...actorFields(req),
+  }, (err, id) => {
+    audit(req, 'SCAN_VIDEO', {
+      targetType: 'scan', targetId: id,
+      metadata: { fileName, verdict: result.verdict, risk_score: result.risk_score, model: result.model, sha256: retained?.sha256 },
+    });
+    if (retained) {
+      DBSqlite.addEvidenceArtifact({
+        scan_id: id, sha256: retained.sha256, md5: retained.md5, size_bytes: retained.sizeBytes,
+        mime_type: retained.mimeType, original_filename: retained.originalFilename, stored_path: retained.storedPath,
+        ...actorFields(req),
+      });
+    }
     res.json({
       risk_score: result.risk_score,
       verdict: result.verdict,
       model: result.model,
+      custody: retained ? { sha256: retained.sha256, md5: retained.md5 } : null,
       evidence: result.evidence || [
         `Spatial contrast variance: ${result.spatialContrastVariance}`,
         `Temporal luminance flicker score: ${result.temporalFlickerScore}`,
@@ -299,11 +571,19 @@ app.get('/media/preview/:filename', (req, res) => {
 });
 
 // 4. AUTHENTICITY VERIFIER REGISTRY & PKI
-app.post('/verify/register', (req, res) => {
+//
+// Registering an "official" communication asserts authenticity on behalf of a
+// market intermediary, so it is admin-only. Read/verify paths stay public —
+// investors must be able to check a code without an account.
+app.post('/verify/register', requireRole('admin'), (req, res) => {
   const { issuerId, issuerName, content } = req.body || {};
   const record = verifyEngine.registerCommunication({ issuerId, issuerName, content });
 
-  DBSqlite.addRegisteredComm(record, () => {
+  DBSqlite.addRegisteredComm({ ...record, user_id: req.user.id }, () => {
+    audit(req, 'VERIFY_REGISTER', {
+      targetType: 'registered_communication', targetId: record.code,
+      metadata: { issuerId: record.issuerId, issuerName: record.issuerName, contentHash: record.contentHash },
+    });
     res.json({
       success: true,
       verify_code: record.code,
@@ -377,21 +657,363 @@ app.get('/dashboard/recent', (req, res) => {
   });
 });
 
+/**
+ * Phase 2: the entity graph, derived from indicators actually extracted from
+ * submitted scans. Previously this returned hardcoded fixture data.
+ *
+ * Response shape is unchanged (nodes with id/type/group/risk, links with
+ * source/target/relationship) so the existing console visualization keeps
+ * working without modification.
+ */
 app.get('/dashboard/graph-network', (req, res) => {
-  res.json({
-    nodes: [
-      { id: 'invest.now@oksbi', type: 'UPI_VPA', group: 'fraud', risk: 95 },
-      { id: 'sebi-official-tips.xyz', type: 'DOMAIN', group: 'fraud', risk: 90 },
-      { id: '+919876543210', type: 'PHONE', group: 'fraud', risk: 85 },
-      { id: '185.220.101.5', type: 'IP_ADDRESS', group: 'proxy', risk: 95 },
-      { id: 'Zerodha Broking Ltd', type: 'ISSUER', group: 'verified', risk: 0 },
-    ],
-    links: [
-      { source: 'invest.now@oksbi', target: 'sebi-official-tips.xyz', relationship: 'USED_IN_CAMPAIGN' },
-      { source: '+919876543210', target: 'invest.now@oksbi', relationship: 'REGISTERED_VPA' },
-      { source: '185.220.101.5', target: 'sebi-official-tips.xyz', relationship: 'HOSTED_ON' },
-    ],
+  const minRisk = req.query.minRisk !== undefined ? Number(req.query.minRisk) : 0;
+
+  DBSqlite.getIocGraph({ minRisk, limit: req.query.limit }, (err, graph) => {
+    if (err) return res.status(500).json({ detail: 'Graph read failed' });
+
+    // Map internal ioc ids to their display values for the link endpoints,
+    // since the visualization addresses nodes by their value string.
+    const valueById = new Map((graph.nodes || []).map((n) => [n.id, n.value]));
+
+    const nodes = (graph.nodes || []).map((n) => ({
+      id: n.value,
+      type: n.type.toUpperCase(),
+      // 'fraud' vs 'suspect' drives node colour in the console. Threshold
+      // mirrors the verdict boundary used elsewhere (>=70 is HIGH_RISK).
+      group: n.max_risk_score >= 70 ? 'fraud' : 'suspect',
+      risk: n.max_risk_score,
+      sightings: n.sighting_count,
+      confidence: n.confidence,
+      firstSeen: n.first_seen,
+      lastSeen: n.last_seen,
+    }));
+
+    const links = (graph.links || [])
+      .map((l) => ({
+        source: valueById.get(l.source_ioc_id),
+        target: valueById.get(l.target_ioc_id),
+        relationship: l.relationship,
+        evidenceScanId: l.evidence_scan_id,
+        confidence: l.confidence,
+      }))
+      .filter((l) => l.source && l.target);
+
+    res.json({
+      nodes,
+      links,
+      derivedFrom: 'extracted_scan_indicators',
+      empty: nodes.length === 0,
+    });
   });
+});
+
+// Graph summary counters for the console.
+app.get('/graph/stats', (req, res) => {
+  DBSqlite.getGraphStats((err, stats) => {
+    if (err) return res.status(500).json({ detail: 'Graph stats failed' });
+    res.json(stats);
+  });
+});
+
+// Campaign list — clusters of linked indicators.
+app.get('/graph/campaigns', (req, res) => {
+  DBSqlite.getCampaigns((err, rows) => {
+    if (err) return res.status(500).json({ detail: 'Campaign read failed' });
+    res.json({ campaigns: rows || [] });
+  });
+});
+
+// Full campaign dossier: members plus every scan that evidenced them.
+app.get('/graph/campaigns/:id', (req, res) => {
+  DBSqlite.getCampaignDetail(req.params.id, (err, campaign) => {
+    if (err) return res.status(500).json({ detail: 'Campaign read failed' });
+    if (!campaign) return res.status(404).json({ detail: 'Campaign not found' });
+    res.json(campaign);
+  });
+});
+
+// "How do you know" — every scan that sighted a given indicator.
+app.get('/graph/ioc/:type/:value/scans', (req, res) => {
+  DBSqlite.getIocByValue(req.params.type, req.params.value, (err, ioc) => {
+    if (err) return res.status(500).json({ detail: 'IOC lookup failed' });
+    if (!ioc) return res.status(404).json({ detail: 'Indicator not found' });
+
+    DBSqlite.getScansForIoc(ioc.id, (scanErr, scans) => {
+      if (scanErr) return res.status(500).json({ detail: 'Scan lookup failed' });
+      res.json({ ioc, scans: scans || [] });
+    });
+  });
+});
+
+// Force a campaign recompute. Admin-only: it rewrites the campaigns tables.
+app.post('/graph/rebuild-campaigns', requireRole('admin'), (req, res) => {
+  DBSqlite.rebuildCampaigns((err, result) => {
+    if (err) return res.status(500).json({ detail: 'Campaign rebuild failed' });
+    audit(req, 'GRAPH_REBUILD_CAMPAIGNS', {
+      targetType: 'campaigns',
+      metadata: result,
+    });
+    res.json({ success: true, ...result });
+  });
+});
+
+// ─────────────────────── 12. PHASE 3: ENRICHMENT ───────────────────────
+
+/**
+ * Enrichment status. Always available so an operator can tell whether
+ * enrichment is off (the default) versus enabled but failing.
+ */
+app.get('/enrichment/status', (req, res) => {
+  DBSqlite.getEnrichmentStats((err, cacheStats) => {
+    res.json({
+      enabled: NetGuard.ENRICHMENT_ENABLED,
+      queue: enrichmentQueue.getStats(),
+      cache: cacheStats || { cachedEntries: 0, bySource: [] },
+      note: NetGuard.ENRICHMENT_ENABLED
+        ? 'Enrichment is enabled. In production this should run from isolated egress so lookups do not reveal investigation activity.'
+        : 'Enrichment is disabled. Set SENTINEL_ENRICHMENT_ENABLED=true to enable outbound RDAP/DNS/CT lookups.',
+    });
+  });
+});
+
+/** Cached enrichment for a domain. Read-only, so no auth required. */
+app.get('/enrichment/domain/:domain', (req, res) => {
+  DBSqlite.getEnrichment('domain', req.params.domain, 'combined', (err, row) => {
+    if (err) return res.status(500).json({ detail: 'Enrichment read failed' });
+    if (!row) {
+      return res.json({
+        domain: req.params.domain,
+        cached: false,
+        enabled: NetGuard.ENRICHMENT_ENABLED,
+        detail: NetGuard.ENRICHMENT_ENABLED
+          ? 'Not yet enriched. Enrichment is queued asynchronously after a scan.'
+          : 'Enrichment is disabled.',
+      });
+    }
+    res.json({ domain: req.params.domain, cached: true, retrieved_at: row.retrieved_at, ...row.payload });
+  });
+});
+
+/**
+ * Queue an on-demand enrichment. Admin-only because it consumes shared
+ * upstream rate limits and generates outbound traffic.
+ */
+app.post('/enrichment/enqueue', requireRole('admin'), (req, res) => {
+  const { domain } = req.body || {};
+  if (!domain) return res.status(400).json({ detail: 'domain is required' });
+
+  const queued = enrichmentQueue.enqueueDomain(domain);
+  audit(req, 'ENRICHMENT_ENQUEUE', {
+    targetType: 'domain', targetId: domain,
+    outcome: queued ? 'SUCCESS' : 'SKIPPED',
+    metadata: { enabled: NetGuard.ENRICHMENT_ENABLED },
+  });
+
+  res.json({
+    success: queued,
+    domain,
+    detail: queued
+      ? 'Enrichment queued. Poll /enrichment/domain/:domain for the result.'
+      : NetGuard.ENRICHMENT_ENABLED
+        ? 'Not queued — already in flight or the queue is full.'
+        : 'Not queued — enrichment is disabled (SENTINEL_ENRICHMENT_ENABLED).',
+  });
+});
+
+// ─────────────────────── 13. PHASE 4: CORRELATION ───────────────────────
+
+/**
+ * Cross-case similarity matches (template reuse, voiceprint, perceptual hash).
+ *
+ * `calibrated: false` is returned deliberately: thresholds are literature
+ * defaults, not validated against a labelled corpus for this dataset, so
+ * consumers must treat matches as leads rather than findings.
+ */
+app.get('/correlation/matches', (req, res) => {
+  DBSqlite.getFingerprintMatches((err, rows) => {
+    if (err) return res.status(500).json({ detail: 'Match read failed' });
+    res.json({
+      matches: rows || [],
+      thresholds: CorrelationEngine.THRESHOLDS,
+      calibrated: CorrelationEngine.CALIBRATED,
+      note: 'Similarity matches are investigative leads requiring human review. Thresholds are uncalibrated defaults; false-match rates on this dataset are unmeasured.',
+    });
+  });
+});
+
+/**
+ * Recompute similarity matches across stored fingerprints.
+ *
+ * Template matching is exact-hash for reuse detection; voiceprint matching is
+ * cosine over stored embeddings. Admin-only as it rewrites match records.
+ */
+app.post('/correlation/recompute', requireRole('admin'), async (req, res) => {
+  const results = { template: 0, voiceprint: 0, phash: 0 };
+
+  const loadKind = (kind) =>
+    new Promise((resolve) => DBSqlite.getFingerprintsByKind(kind, (err, rows) => resolve(rows || [])));
+
+  // Template reuse: identical fingerprints mean the same kit/template text.
+  const templates = await loadKind('template');
+  const byHash = new Map();
+  for (const fp of templates) {
+    if (!fp.hash_value) continue;
+    if (!byHash.has(fp.hash_value)) byHash.set(fp.hash_value, []);
+    byHash.get(fp.hash_value).push(fp);
+  }
+  for (const group of byHash.values()) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const ok = await DBSqlite.recordFingerprintMatch({
+          kind: 'template', a: group[i].id, b: group[j].id,
+          score: 1.0, threshold: 1.0, method: 'exact_shingle_hash',
+        });
+        if (ok) results.template++;
+      }
+    }
+  }
+
+  // Voiceprint: cosine similarity over stored speaker embeddings.
+  const voiceprints = await loadKind('voiceprint');
+  const parsed = voiceprints
+    .map((fp) => {
+      try { return { id: fp.id, vector: JSON.parse(fp.vector_json || 'null') }; }
+      catch { return null; }
+    })
+    .filter((v) => v && Array.isArray(v.vector));
+
+  for (let i = 0; i < parsed.length; i++) {
+    for (let j = i + 1; j < parsed.length; j++) {
+      const score = CorrelationEngine.cosineSimilarity(parsed[i].vector, parsed[j].vector);
+      if (score !== null && score >= CorrelationEngine.THRESHOLDS.voiceprint) {
+        const ok = await DBSqlite.recordFingerprintMatch({
+          kind: 'voiceprint', a: parsed[i].id, b: parsed[j].id,
+          score, threshold: CorrelationEngine.THRESHOLDS.voiceprint, method: 'cosine_similarity',
+        });
+        if (ok) results.voiceprint++;
+      }
+    }
+  }
+
+  // Perceptual hash: Hamming distance survives recompression where SHA-256 does not.
+  const phashes = (await loadKind('phash')).filter((fp) => fp.hash_value);
+  for (let i = 0; i < phashes.length; i++) {
+    for (let j = i + 1; j < phashes.length; j++) {
+      const distance = CorrelationEngine.hammingDistanceHex(phashes[i].hash_value, phashes[j].hash_value);
+      if (distance !== null && distance <= CorrelationEngine.THRESHOLDS.phash) {
+        const ok = await DBSqlite.recordFingerprintMatch({
+          kind: 'phash', a: phashes[i].id, b: phashes[j].id,
+          score: distance, threshold: CorrelationEngine.THRESHOLDS.phash, method: 'dhash_hamming',
+        });
+        if (ok) results.phash++;
+      }
+    }
+  }
+
+  audit(req, 'CORRELATION_RECOMPUTE', { targetType: 'fingerprint_matches', metadata: results });
+  res.json({ success: true, newMatches: results, calibrated: CorrelationEngine.CALIBRATED });
+});
+
+// ─────────────────── 14. PHASE 5: INTEROP & DOSSIER ───────────────────
+
+/** STIX 2.1 bundle of the current indicator graph and campaigns. */
+app.get('/export/stix', (req, res) => {
+  const minRisk = req.query.minRisk !== undefined ? Number(req.query.minRisk) : 0;
+
+  DBSqlite.getIocGraph({ minRisk, limit: 2000 }, (err, graph) => {
+    if (err) return res.status(500).json({ detail: 'Graph read failed' });
+
+    DBSqlite.getCampaigns((campErr, campaigns) => {
+      if (campErr) return res.status(500).json({ detail: 'Campaign read failed' });
+
+      // Resolve members per campaign so the bundle can emit 'indicates' edges.
+      const memberMap = new Map();
+      let remaining = (campaigns || []).length;
+
+      const finish = () => {
+        const bundle = ExportEngine.buildStixBundle({
+          iocs: graph.nodes || [], links: graph.links || [],
+          campaigns: campaigns || [], campaignMembers: memberMap,
+        });
+        res.json(bundle);
+      };
+
+      if (remaining === 0) return finish();
+
+      for (const campaign of campaigns) {
+        DBSqlite.getCampaignDetail(campaign.id, (dErr, detail) => {
+          if (!dErr && detail) memberMap.set(campaign.id, detail.members.map((m) => m.id));
+          if (--remaining === 0) finish();
+        });
+      }
+    });
+  });
+});
+
+/** MISP-format export for a single campaign. */
+app.get('/export/misp/:campaignId', (req, res) => {
+  DBSqlite.getCampaignDetail(req.params.campaignId, (err, campaign) => {
+    if (err) return res.status(500).json({ detail: 'Campaign read failed' });
+    if (!campaign) return res.status(404).json({ detail: 'Campaign not found' });
+    res.json(ExportEngine.buildMispEvent({ campaign, iocs: campaign.members }));
+  });
+});
+
+/**
+ * Full investigation dossier for a campaign: indicators, evidencing scans,
+ * chain of custody, enrichment provenance, ATT&CK techniques, and an explicit
+ * limitations section.
+ *
+ * Admin-only: it aggregates custody records and submitter-linked scan data.
+ */
+app.get('/export/dossier/:campaignId', requireRole('admin'), (req, res) => {
+  DBSqlite.getCampaignDetail(req.params.campaignId, (err, campaign) => {
+    if (err) return res.status(500).json({ detail: 'Campaign read failed' });
+    if (!campaign) return res.status(404).json({ detail: 'Campaign not found' });
+
+    // Collect the flags from every evidencing scan so ATT&CK mapping reflects
+    // observed behaviour rather than the campaign label alone.
+    const scanIds = campaign.scans.map((s) => s.id);
+    DBSqlite.getRecentScans(500, (scanErr, allScans) => {
+      const relevant = (allScans || []).filter((s) => scanIds.includes(s.id));
+      const flags = [];
+      for (const scan of relevant) {
+        try { flags.push(...JSON.parse(scan.flags_json || '[]')); } catch { /* skip unparseable */ }
+      }
+
+      const evidenceHashes = relevant.map((s) => s.evidence_sha256).filter(Boolean);
+      const collectEvidence = evidenceHashes.length
+        ? Promise.all(evidenceHashes.map((h) =>
+            new Promise((resolve) => DBSqlite.getEvidenceBySha256(h, (e, rows) => resolve(rows || [])))
+          )).then((sets) => sets.flat())
+        : Promise.resolve([]);
+
+      collectEvidence.then((evidence) => {
+        const dossier = ExportEngine.buildDossier({
+          campaign,
+          iocs: campaign.members,
+          scans: campaign.scans,
+          evidence,
+          enrichment: [],
+          attackTechniques: ExportEngine.mapFlagsToAttack(flags),
+        });
+
+        audit(req, 'EXPORT_DOSSIER', {
+          targetType: 'campaign', targetId: campaign.id,
+          metadata: { indicators: campaign.member_count, scans: campaign.scans.length },
+        });
+
+        res.json(dossier);
+      });
+    });
+  });
+});
+
+/** ATT&CK techniques implied by a set of flags — useful for a single scan view. */
+app.post('/export/attack-mapping', (req, res) => {
+  const { flags } = req.body || {};
+  if (!Array.isArray(flags)) return res.status(400).json({ detail: 'flags array is required' });
+  res.json({ techniques: ExportEngine.mapFlagsToAttack(flags) });
 });
 
 // 6. ALERTS & WARNINGS
@@ -401,7 +1023,9 @@ app.get('/alerts/feed', (req, res) => {
   });
 });
 
-app.post('/alerts/create', (req, res) => {
+// Publishing a public investor warning names a domain and a payment handle as
+// fraudulent. That is a reputational assertion, so it is admin-only.
+app.post('/alerts/create', requireRole('admin'), (req, res) => {
   const { title, description, severity, upiId, domain } = req.body || {};
   const alert = {
     title: title || 'New Scam Warning',
@@ -413,6 +1037,10 @@ app.post('/alerts/create', (req, res) => {
   };
 
   DBSqlite.addAlert(alert, (err, id) => {
+    audit(req, 'ALERT_CREATE', {
+      targetType: 'threat_alert', targetId: id,
+      metadata: { title: alert.title, severity: alert.severity, upiId: alert.upiId, domain: alert.domain },
+    });
     res.json({ success: true, alert: { id, ...alert } });
   });
 });
@@ -430,16 +1058,86 @@ app.get('/reports/takedowns', (req, res) => {
   });
 });
 
-app.post('/reports/status', (req, res) => {
+app.post('/reports/status', requireRole('admin'), (req, res) => {
   const { id, status } = req.body || {};
   DBSqlite.updateTakedownStatus(id, status, () => {
+    audit(req, 'REPORT_STATUS_CHANGE', {
+      targetType: 'takedown', targetId: id,
+      metadata: { newStatus: status },
+    });
     res.json({ success: true, id, status });
   });
 });
 
-app.post('/reports/cert-in-takedown', (req, res) => {
-  const { targetDomain, scamVpa, targetPhone, threatCategory } = req.body || {};
+// Generates a CERT-In incident notice citing Sec 70B of the IT Act, 2000.
+// Admin-only and always audited: the notice is a legal artifact and must be
+// attributable to a named operator.
+app.post('/reports/cert-in-takedown', requireRole('admin'), (req, res) => {
+  const { targetDomain, scamVpa, targetPhone, threatCategory, campaignId } = req.body || {};
+
+  // Phase 2: when a campaignId is supplied, enumerate every indicator in the
+  // cluster so one notice names the whole operation instead of the single
+  // domain an operator happened to type. Falls back to manual fields when no
+  // campaign is given, so the existing workflow is unchanged.
+  if (campaignId) {
+    return DBSqlite.getCampaignDetail(campaignId, (err, campaign) => {
+      if (err) return res.status(500).json({ detail: 'Campaign lookup failed' });
+      if (!campaign) return res.status(404).json({ detail: 'Campaign not found' });
+
+      const byType = (types) =>
+        campaign.members.filter((m) => types.includes(m.type)).map((m) => m.value);
+
+      const domains = byType(['domain', 'sender_domain']);
+      const vpas = byType(['upi_vpa']);
+      const phones = byType(['phone_in']);
+      const channels = byType(['telegram', 'whatsapp']);
+      const wallets = byType(['wallet_btc', 'wallet_eth', 'wallet_tron']);
+      const ips = byType(['originating_ip']);
+      const banks = byType(['bank_account', 'ifsc']);
+
+      finalizeTakedown(req, res, {
+        threatCategory,
+        campaign,
+        domains, vpas, phones, channels, wallets, ips, banks,
+      });
+    });
+  }
+
+  finalizeTakedown(req, res, {
+    threatCategory,
+    domains: targetDomain ? [targetDomain] : [],
+    vpas: scamVpa ? [scamVpa] : [],
+    phones: targetPhone ? [targetPhone] : [],
+    channels: [], wallets: [], ips: [], banks: [],
+  });
+});
+
+/**
+ * Build and persist a CERT-In notice from a resolved indicator set.
+ * Shared by the manual and campaign-driven paths above so both produce an
+ * identically structured legal artifact.
+ */
+function finalizeTakedown(req, res, {
+  threatCategory, campaign,
+  domains = [], vpas = [], phones = [], channels = [], wallets = [], ips = [], banks = [],
+}) {
   const incidentId = `CERT-IN-${Date.now()}`;
+  const list = (arr) => (arr.length ? arr.join(', ') : 'N/A');
+
+  const campaignBlock = campaign
+    ? `
+CAMPAIGN CORRELATION:
+---------------------
+Campaign ID: ${campaign.id}
+Campaign Label: ${campaign.label}
+Correlated Indicators: ${campaign.member_count}
+Correlation Method: ${campaign.cluster_method} over extracted indicator graph
+Evidencing Scans: ${campaign.scans.length} independent submission(s)
+First Observed: ${campaign.first_seen || 'unknown'}
+Last Observed: ${campaign.last_seen || 'unknown'}
+Peak Risk Score: ${campaign.max_risk_score}/100
+`
+    : '';
 
   const legalNoticeText = `
 INDIAN COMPUTER EMERGENCY RESPONSE TEAM (CERT-In) INCIDENT REPORT
@@ -447,45 +1145,76 @@ INDIAN COMPUTER EMERGENCY RESPONSE TEAM (CERT-In) INCIDENT REPORT
 INCIDENT ID: ${incidentId}
 DATE: ${new Date().toISOString()}
 LEGAL AUTHORITY: Section 70B of Information Technology Act, 2000
-
-TARGET IDENTIFIED FOR REGULATORY TAKEDOWN:
+${campaignBlock}
+TARGETS IDENTIFIED FOR REGULATORY TAKEDOWN:
 ------------------------------------------
-Phishing Domain: ${targetDomain || 'N/A'} (Dispatched to Department of Telecommunications - DoT)
-Scam UPI VPA Handle: ${scamVpa || 'N/A'} (Dispatched to NPCI DPIP Portal for VPA Freeze)
-Target Phone / Telegram: ${targetPhone || 'N/A'}
+Phishing Domain(s): ${list(domains)} (Dispatched to Department of Telecommunications - DoT)
+Scam UPI VPA Handle(s): ${list(vpas)} (Dispatched to NPCI DPIP Portal for VPA Freeze)
+Target Phone Number(s): ${list(phones)}
+Messaging Channel(s): ${list(channels)}
+Cryptocurrency Wallet(s): ${list(wallets)}
+Bank Account / IFSC: ${list(banks)}
+Originating IP(s): ${list(ips)}
 Threat Category: ${threatCategory || 'Securities Market Impersonation Fraud'}
 
 LEGAL DIRECTIVE & COMPLIANCE ENFORCEMENT:
 1. DoT DNS Blocking Order issued under Rule 3 of IT (Intermediary Guidelines) Rules, 2021.
 2. NPCI DPIP VPA Account Freeze Order dispatched to beneficiary bank under SEBI Fraud Directive.
+
+EVIDENTIARY BASIS:
+Indicators above were extracted from submitted artifacts and correlated by
+shared-infrastructure analysis. Each correlation edge references the specific
+scan that evidenced it and is retrievable via the platform audit trail.
+NOTE: Indicators identify infrastructure and payment rails only. Attribution to
+a natural person requires legal process against the relevant registrar, ISP,
+bank, or exchange.
   `.trim();
 
   const newTakedown = {
     id: incidentId,
-    target_domain: targetDomain || 'N/A',
-    scam_vpa: scamVpa || 'N/A',
-    target_phone: targetPhone || 'N/A',
+    // The takedowns table stores one primary target per column; the full
+    // enumerated set lives in legal_notice_text above.
+    target_domain: domains[0] || 'N/A',
+    scam_vpa: vpas[0] || 'N/A',
+    target_phone: phones[0] || channels[0] || 'N/A',
     threat_category: threatCategory || 'Securities Market Impersonation Fraud',
     status: 'DISPATCHED_TO_DOT_NPCI',
-    dot_dns_status: targetDomain ? 'BLOCKED_BY_DOT' : 'N/A',
-    npci_vpa_status: scamVpa ? 'FROZEN_BY_NPCI' : 'N/A',
+    dot_dns_status: domains.length ? 'BLOCKED_BY_DOT' : 'N/A',
+    npci_vpa_status: vpas.length ? 'FROZEN_BY_NPCI' : 'N/A',
     date_str: new Date().toISOString().split('T')[0],
-    legal_notice_text: legalNoticeText
+    legal_notice_text: legalNoticeText,
+    user_id: req.user.id,
   };
 
   DBSqlite.addTakedown(newTakedown, () => {
+    audit(req, 'REPORT_CERT_IN_GENERATE', {
+      targetType: 'takedown', targetId: incidentId,
+      metadata: {
+        campaignId: campaign?.id ?? null,
+        domains, vpas, phones, channels, wallets, ips, banks,
+        threatCategory: newTakedown.threat_category,
+        legalAuthority: 'IT Act 2000 s.70B',
+      },
+    });
     res.json({
       success: true,
       incidentId,
       legalNoticeText,
-      takedown: newTakedown
+      takedown: newTakedown,
+      correlatedIndicators: campaign
+        ? { campaignId: campaign.id, total: campaign.member_count, domains, vpas, phones, channels, wallets, ips, banks }
+        : null,
     });
   });
-});
+}
 
 // Explicit Transparent Simulated Government Intermediary Endpoints
-app.post('/reports/dot-dns-block', (req, res) => {
+app.post('/reports/dot-dns-block', requireRole('admin'), (req, res) => {
   const { domain } = req.body || {};
+  audit(req, 'REPORT_DOT_DNS_BLOCK', {
+    targetType: 'domain', targetId: domain || 'N/A',
+    metadata: { simulated: true },
+  });
   res.json({
     status: 'SIMULATED_INSTITUTIONAL_API_ENDPOINT',
     targetDomain: domain || 'N/A',
@@ -495,8 +1224,12 @@ app.post('/reports/dot-dns-block', (req, res) => {
   });
 });
 
-app.post('/reports/npci-vpa-freeze', (req, res) => {
+app.post('/reports/npci-vpa-freeze', requireRole('admin'), (req, res) => {
   const { vpa } = req.body || {};
+  audit(req, 'REPORT_NPCI_VPA_FREEZE', {
+    targetType: 'upi_vpa', targetId: vpa || 'N/A',
+    metadata: { simulated: true },
+  });
   res.json({
     status: 'SIMULATED_INSTITUTIONAL_API_ENDPOINT',
     targetVpa: vpa || 'N/A',
@@ -513,7 +1246,7 @@ app.get('/social/feed', (req, res) => {
   });
 });
 
-app.post('/social/ingest', (req, res) => {
+app.post('/social/ingest', requireRole('admin'), (req, res) => {
   const { platform, author, content } = req.body || {};
   const post = {
     platform: platform || 'Telegram',
@@ -524,13 +1257,62 @@ app.post('/social/ingest', (req, res) => {
   };
 
   DBSqlite.addSocialPost(post, (err, id) => {
+    audit(req, 'SOCIAL_INGEST', {
+      targetType: 'social_post', targetId: id,
+      metadata: { platform: post.platform, author: post.author },
+    });
     res.json({ success: true, post: { id, ...post } });
   });
 });
 
 // 9. SYSTEM RESET
-app.post('/system/reset', (req, res) => {
+app.post('/system/reset', requireRole('admin'), (req, res) => {
+  audit(req, 'SYSTEM_RESET', { targetType: 'system', targetId: 'sentinel.db' });
   res.json({ success: true, message: 'System database reset available.' });
+});
+
+// 11. AUDIT TRAIL (Phase 0 item 0.3)
+//
+// Admin-only: the log records who investigated what, which is itself sensitive.
+app.get('/audit/log', requireRole('admin'), (req, res) => {
+  const { limit, offset, action, actor } = req.query;
+  DBSqlite.getAuditLog({ limit, offset, action, actor }, (err, rows) => {
+    if (err) return res.status(500).json({ detail: 'Audit log read failed' });
+    res.json({ entries: rows || [], count: (rows || []).length });
+  });
+});
+
+// Recompute the evidence custody chain and report the first break, if any.
+app.get('/audit/verify-evidence', requireRole('admin'), (req, res) => {
+  DBSqlite.verifyEvidenceChain((err, result) => {
+    if (err) return res.status(500).json({ detail: 'Evidence chain verification failed' });
+    audit(req, 'AUDIT_VERIFY_EVIDENCE', {
+      targetType: 'evidence_artifacts',
+      metadata: { valid: result.valid, entriesChecked: result.entriesChecked },
+    });
+    res.json(result);
+  });
+});
+
+// Look up every custody record for a given artifact hash — supports "have we
+// seen this file before" lookups across unrelated scans.
+app.get('/audit/evidence/:sha256', requireRole('admin'), (req, res) => {
+  DBSqlite.getEvidenceBySha256(req.params.sha256, (err, rows) => {
+    if (err) return res.status(500).json({ detail: 'Evidence lookup failed' });
+    res.json({ sha256: req.params.sha256, sightings: rows || [] });
+  });
+});
+
+// Recompute the hash chain and report the first break, if any.
+app.get('/audit/verify', requireRole('admin'), (req, res) => {
+  DBSqlite.verifyAuditChain((err, result) => {
+    if (err) return res.status(500).json({ detail: 'Audit verification failed' });
+    audit(req, 'AUDIT_VERIFY', {
+      targetType: 'audit_log',
+      metadata: { valid: result.valid, entriesChecked: result.entriesChecked },
+    });
+    res.json(result);
+  });
 });
 
 // 10. ML SERVICE STATUS (Python library availability)
@@ -550,6 +1332,23 @@ app.get('/ml-status', async (req, res) => {
 // SPA Fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// Express error handler — converts a thrown handler error into a 500 instead of
+// an unhandled rejection.
+app.use((err, req, res, next) => {
+  console.error(`[error] ${req.method} ${req.path}: ${err.message}`);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ detail: 'Internal server error' });
+});
+
+// Last-resort guards. A single malformed record should degrade one request, not
+// terminate the process and take the whole service offline.
+process.on('uncaughtException', (err) => {
+  console.error(`[fatal] uncaught exception: ${err.stack || err.message}`);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(`[fatal] unhandled rejection: ${reason?.stack || reason}`);
 });
 
 // Start Server
@@ -576,4 +1375,10 @@ function startServer(port) {
   });
 }
 
-startServer(process.env.PORT || 8000);
+// Only listen when run directly, so tests can import the app and drive it with
+// an ephemeral port instead of contending for 8000.
+if (require.main === module) {
+  startServer(process.env.PORT || 8000);
+}
+
+module.exports = { app, startServer };

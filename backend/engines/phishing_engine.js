@@ -9,10 +9,21 @@
  */
 
 const { parse: parseDomain } = require('tldts');
+const IocExtractor = require('./ioc_extractor');
 
 const OFFICIAL_DOMAINS = [
   'sebi.gov.in', 'zerodha.com', 'groww.in', 'angelone.in', 'icicidirect.com',
   'hdfcsec.com', 'nifty.com', 'nseindia.com', 'bseindia.com', 'upstox.com',
+];
+
+// Terms whose presence, combined with a non-official sender/link domain,
+// indicates impersonation of a regulator or exchange rather than a merely
+// suspicious message. Mirrors AUTHORITY_IMPERSONATION_TERMS in the (unused)
+// Python reference engine, ported here so the sender-spoofing check actually
+// runs in the code path server.js calls.
+const AUTHORITY_TERMS = [
+  'sebi', 'securities and exchange board', 'nse', 'bse', 'rbi',
+  'income tax department', 'stock exchange', 'regulator',
 ];
 
 // Homoglyph substitution map (Latin ↔ Cyrillic/similar)
@@ -45,6 +56,10 @@ const REGIONAL_PHISHING_PATTERNS = [
   { lang: 'Gujarati', regex: /(?:ગેરંટીવાળું|ચોક્કસ)\s*(?:વળતર|નફો)/i, flag: 'Gujarati: Promising illegal guaranteed returns (ગેરંટીવાળું વળતર)' },
 ];
 
+function dedupe(arr) {
+  return [...new Set(arr)];
+}
+
 class PhishingEngine {
   static analyzeText(text, sender = '') {
     const content = text || '';
@@ -63,16 +78,45 @@ class PhishingEngine {
     }
 
     // 2. Extract domains using tldts & check Typosquatting
-    const urlMatches = content.match(/https?:\/\/[^\s<>"']+|[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?/g) || [];
+    //
+    // The alternation matches either a full URL or a bare host-like token. The
+    // bare-token branch uses a negative lookahead for '@' so the local part of
+    // an address ("phase2.smoke" in "phase2.smoke@oksbi") is not mistaken for a
+    // domain — tldts accepts unknown suffixes like ".smoke", so this has to be
+    // excluded lexically rather than by suffix validation alone.
+    const urlMatches = content.match(
+      /https?:\/\/[^\s<>"']+|[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?(?![-a-zA-Z0-9.]*@)/g
+    ) || [];
     const checkedDomains = new Set();
+    // Phase 1: persist what was found instead of throwing it away — only
+    // urlCount survived previously, leaving the domains unqueryable prose
+    // buried inside flag detail strings.
+    const extractedUrls = dedupe(urlMatches);
+    const extractedDomains = [];
 
     for (const raw of urlMatches) {
-      const cleaned = raw.replace(/^https?:\/\//, '').split('/')[0].toLowerCase();
+      // Strip scheme, path, and any trailing sentence punctuation. Without the
+      // punctuation trim, "visit example.com, pay..." yields the domain
+      // "example.com," which would become a distinct (and wrong) graph node.
+      const cleaned = raw
+        .replace(/^https?:\/\//, '')
+        .split('/')[0]
+        .replace(/[.,;:!?)\]}'"]+$/, '')
+        .toLowerCase();
+
       const parsed = parseDomain(cleaned);
-      const domain = parsed.domain || cleaned;
+
+      // tldts returns a null domain when the string has no valid public suffix.
+      // That happens for fragments like the local part of a UPI VPA
+      // ("phase2.smoke" out of "phase2.smoke@oksbi"), which must not be
+      // recorded as a domain — a polluted graph is worse than a sparse one.
+      if (!parsed.domain || !parsed.publicSuffix) continue;
+
+      const domain = parsed.domain;
 
       if (checkedDomains.has(domain)) continue;
       checkedDomains.add(domain);
+      extractedDomains.push(domain);
 
       // Skip if it IS an official domain
       if (OFFICIAL_DOMAINS.includes(domain)) continue;
@@ -85,6 +129,7 @@ class PhishingEngine {
           type: 'typosquatting_domain',
           severity: 'high',
           detail: `Typosquatting domain detected: "${domain}" mimics official "${typoResult.targetDomain}" (method: ${typoResult.method}, Levenshtein distance: ${typoResult.distance}).`,
+          domain,
         });
       }
     }
@@ -129,6 +174,33 @@ class PhishingEngine {
       });
     }
 
+    // 5. Sender-domain spoofing check.
+    // The `sender` argument was accepted and silently ignored — this is the
+    // only place in the engine that used the caller-supplied sender at all.
+    // Flags when the message impersonates a regulator/exchange by name while
+    // the sending domain is neither an official domain nor a lookalike of one
+    // close enough to be a typo (i.e. it is a domain with no relationship to
+    // the entity it claims to represent — the most common real-world pattern).
+    const senderDomain = this._domainOf(sender);
+    const mentionsAuthority = AUTHORITY_TERMS.some((term) => content.toLowerCase().includes(term));
+    if (senderDomain && mentionsAuthority && !OFFICIAL_DOMAINS.includes(senderDomain)) {
+      const typoResult = this.checkExpandedTyposquatting(senderDomain);
+      cumulativeRiskScore += 40;
+      flags.push({
+        type: 'sender_spoofing',
+        severity: 'critical',
+        detail: typoResult.isTyposquat
+          ? `Sender domain "${senderDomain}" is a lookalike of official "${typoResult.targetDomain}" (method: ${typoResult.method}) but is not the genuine domain.`
+          : `Message references a regulator/exchange by name but the sender domain "${senderDomain}" is not any recognised official domain.`,
+        senderDomain,
+      });
+    }
+
+    // 6. IOC extraction — UPI VPAs, phone numbers, Telegram/WhatsApp links,
+    // crypto wallets, IFSC/account pairs. These are the identifiers that
+    // actually get accounts frozen; previously nothing extracted them.
+    const iocs = IocExtractor.extract(content);
+
     const finalScore = Math.min(100, Math.max(0, Math.round(cumulativeRiskScore)));
 
     let verdict = 'SAFE';
@@ -141,8 +213,22 @@ class PhishingEngine {
       flags,
       entropy: parseFloat(textEntropy.toFixed(2)),
       urlCount: urlMatches.length,
+      urls: extractedUrls,
+      domains: extractedDomains,
+      iocs,
+      senderDomain,
       explanation: flags,
     };
+  }
+
+  static _domainOf(sender) {
+    if (!sender) return null;
+    const str = String(sender);
+    const emailMatch = str.match(/[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+    if (emailMatch) return emailMatch[1].toLowerCase();
+    // Bare domain (no @) — accept as-is if it looks like one.
+    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(str)) return str.toLowerCase();
+    return null;
   }
 
   /**

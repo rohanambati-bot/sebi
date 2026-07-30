@@ -28,4 +28,11 @@ keys/
 backend/keys/
 *.pem
 sentinel.db
+# Retained evidence artifacts (Phase 1 chain of custody) — content-addressed
+# uploads must never be committed to source control.
+backend/data/evidence/
+# Database backups (pre-migration snapshots may contain legacy cleartext creds)
+sentinel.db.*
+*.db.backup
+*.db.pre_phase0_backup
 .env

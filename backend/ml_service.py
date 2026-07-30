@@ -205,6 +205,11 @@ def analyze_audio(filepath):
             processed = preprocess_wav(wav_path)
             embedding = encoder.embed_utterance(processed)
             result['speaker_embedding_dims'] = len(embedding)
+            # Phase 4: return the actual vector, not just its dimensionality.
+            # Previously the embedding was computed and discarded, which made
+            # cross-case voice matching impossible. Rounded to 6 decimals to
+            # keep the JSON payload small without affecting cosine similarity.
+            result['speaker_embedding'] = [round(float(x), 6) for x in embedding]
             result['libraries_used'].append('resemblyzer (speaker embedding)')
             result['evidence'].append(
                 f"Speaker embedding extracted ({len(embedding)}-dim vector). Ready for voiceprint comparison."
