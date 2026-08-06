@@ -575,13 +575,66 @@ def check_status():
         }
     }
 
+# ═══════════════════════════════════════════════════════════════
+# PERSISTENT SERVE MODE (stdin/stdout JSON-RPC)
+# ═══════════════════════════════════════════════════════════════
+def serve_loop():
+    """Read JSON requests from stdin, dispatch, write JSON responses to stdout.
+
+    Protocol: one JSON object per line (newline-delimited JSON).
+    Request:  {"id": <int>, "mode": "audio"|"image"|"video"|"status", "filepath": "..."}
+    Response: {"id": <int>, ...result...}
+
+    The process stays alive between requests so heavy libraries (librosa, opencv,
+    mediapipe) only load once.
+    """
+    # Signal readiness so the Node bridge knows imports are done.
+    sys.stdout.write(json.dumps({"ready": True, "available_libraries": AVAILABLE}) + "\n")
+    sys.stdout.flush()
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            req = json.loads(line)
+        except json.JSONDecodeError as e:
+            resp = {"id": None, "success": False, "error": f"Invalid JSON: {e}"}
+            sys.stdout.write(json.dumps(resp) + "\n")
+            sys.stdout.flush()
+            continue
+
+        req_id = req.get("id")
+        mode = (req.get("mode") or "").lower()
+        filepath = req.get("filepath")
+
+        if mode == "status":
+            result = check_status()
+        elif mode == "audio" and filepath:
+            result = analyze_audio(filepath)
+        elif mode == "image" and filepath:
+            result = analyze_image(filepath)
+        elif mode == "video" and filepath:
+            result = analyze_video(filepath)
+        else:
+            result = error_result(f"Unknown mode or missing filepath: {mode}")
+
+        result["id"] = req_id
+        sys.stdout.write(json.dumps(result) + "\n")
+        sys.stdout.flush()
+
 
 # ═══════════════════════════════════════════════════════════════
 # CLI ENTRY POINT
 # ═══════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    if len(sys.argv) >= 2 and sys.argv[1].lower() == '--serve':
+        serve_loop()
+        sys.exit(0)
+
     if len(sys.argv) < 2:
-        print(json.dumps(error_result("Usage: ml_service.py <mode> [filepath]")))
+        print(json.dumps(error_result("Usage: ml_service.py <mode> [filepath]  OR  ml_service.py --serve")))
         sys.exit(1)
 
     mode = sys.argv[1].lower()

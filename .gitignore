@@ -24,15 +24,29 @@ node_modules/
 backend/node_modules/
 
 # Security Hygiene
+# Private keys — NEVER commit key material
 keys/
 backend/keys/
 *.pem
+*.key
+
+# SQLite database files — generated at runtime, differ per machine,
+# may contain test scan data and hashed credentials
 sentinel.db
+backend/sentinel.db
+*.db
+# Database backups (pre-migration snapshots may contain legacy cleartext creds)
+sentinel.db.*
+backend/sentinel.db.*
+*.db.backup
+*.db.pre_phase0_backup
+*.db.pre_phase2_backup
+
 # Retained evidence artifacts (Phase 1 chain of custody) — content-addressed
 # uploads must never be committed to source control.
 backend/data/evidence/
-# Database backups (pre-migration snapshots may contain legacy cleartext creds)
-sentinel.db.*
-*.db.backup
-*.db.pre_phase0_backup
+
+# Environment files
 .env
+.env.*
+!.env.example

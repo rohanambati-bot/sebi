@@ -1,0 +1,769 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SentinelSEBI API",
+    "description": "AI-driven financial fraud detection platform protecting Indian retail investors from phishing, deepfakes, and impersonation scams in capital markets. Built for the SEBI hackathon.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "SentinelSEBI Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "Local development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Admin JWT token obtained from POST /auth/login"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "detail": { "type": "string" }
+        }
+      },
+      "PhishingResult": {
+        "type": "object",
+        "properties": {
+          "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "verdict": { "type": "string", "enum": ["SAFE", "MODERATE_RISK_SUSPICIOUS", "HIGH_RISK_PHISHING"] },
+          "flags": { "type": "array", "items": { "type": "object" } },
+          "entropy": { "type": "number" },
+          "urlCount": { "type": "integer" },
+          "urls": { "type": "array", "items": { "type": "string" } },
+          "domains": { "type": "array", "items": { "type": "string" } },
+          "iocs": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "MediaResult": {
+        "type": "object",
+        "properties": {
+          "risk_score": { "type": "integer" },
+          "verdict": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "metrics": { "type": "object" },
+          "model": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Sign in and receive JWT token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "JWT session with role and token" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get current authenticated user info",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "User profile" },
+          "401": { "description": "Not authenticated" }
+        }
+      }
+    },
+    "/phishing/analyze": {
+      "post": {
+        "tags": ["Phishing Detection"],
+        "summary": "Analyze text for phishing signals",
+        "description": "Runs Shannon entropy, typosquat detection, regex pattern matching, IOC extraction, and regional language analysis. Rate limited: 30 req/min per IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text"],
+                "properties": {
+                  "text": { "type": "string", "maxLength": 50000 },
+                  "sender": { "type": "string" },
+                  "channel": { "type": "string", "enum": ["email", "sms", "whatsapp", "telegram"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Phishing analysis result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PhishingResult" } } } },
+          "400": { "description": "Text missing or exceeds 50,000 chars" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/phishing/upload-eml": {
+      "post": {
+        "tags": ["Phishing Detection"],
+        "summary": "Upload and analyze an EML email file",
+        "description": "Parses MIME headers, checks DKIM presence, extracts body for phishing analysis. Rate limited: 10 req/min per IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "EML analysis with parsed headers and phishing flags" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/media/analyze-image": {
+      "post": {
+        "tags": ["Media Forensics"],
+        "summary": "Analyze image for manipulation (ELA, metadata forensics)",
+        "description": "Error Level Analysis, EXIF metadata inspection, and optional OpenCV/MediaPipe face mesh detection. Rate limited: 10 req/min per IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Image forensics result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MediaResult" } } } },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/media/analyze-audio": {
+      "post": {
+        "tags": ["Media Forensics"],
+        "summary": "Analyze audio for voice cloning artifacts",
+        "description": "FFT spectral analysis, MFCC, zero-crossing rate, and optional Resemblyzer speaker embedding. Rate limited: 10 req/min per IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Audio forensics result" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/media/analyze-video": {
+      "post": {
+        "tags": ["Media Forensics"],
+        "summary": "Analyze video for deepfake signals",
+        "description": "Frame extraction, temporal consistency analysis, face mesh landmark tracking. Rate limited: 10 req/min per IP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Video forensics result" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/media/preview/{filename}": {
+      "get": {
+        "tags": ["Media Forensics"],
+        "summary": "Serve ELA preview image",
+        "parameters": [{ "name": "filename", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "ELA preview image" } }
+      }
+    },
+    "/verify/register": {
+      "post": {
+        "tags": ["PKI Verification"],
+        "summary": "Register an official communication with RSA-2048 signature",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "issuerId": { "type": "string" },
+                  "issuerName": { "type": "string" },
+                  "content": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Registration certificate with verify code and QR" },
+          "401": { "description": "Not authenticated" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/verify/by-code": {
+      "post": {
+        "tags": ["PKI Verification"],
+        "summary": "Verify communication by verification code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "code": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Verification result with issuer and domain" } }
+      }
+    },
+    "/verify/by-code/{code}": {
+      "get": {
+        "tags": ["PKI Verification"],
+        "summary": "Verify communication by code (GET variant)",
+        "parameters": [{ "name": "code", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Verification result" } }
+      }
+    },
+    "/verify/by-content": {
+      "post": {
+        "tags": ["PKI Verification"],
+        "summary": "Fuzzy-match content against registered communications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "text": { "type": "string", "maxLength": 50000 } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Similarity result with verdict" } }
+      }
+    },
+    "/verify/by-file": {
+      "post": {
+        "tags": ["PKI Verification"],
+        "summary": "Verify a file's content hash or embedded QR code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": { "file": { "type": "string", "format": "binary" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "File verification result" } }
+      }
+    },
+    "/verify/check-text": {
+      "post": {
+        "tags": ["PKI Verification"],
+        "summary": "Check text against registry (alias for /verify/by-content)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "text": { "type": "string", "maxLength": 50000 } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Similarity result" } }
+      }
+    },
+    "/verify/registry": {
+      "get": {
+        "tags": ["PKI Verification"],
+        "summary": "List all registered official communications",
+        "responses": { "200": { "description": "Array of registered communications" } }
+      }
+    },
+    "/dashboard/stats": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get aggregate scan statistics",
+        "responses": { "200": { "description": "Total scans, high-risk count, breakdown by type" } }
+      }
+    },
+    "/dashboard/recent": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get recent scans table",
+        "responses": { "200": { "description": "Array of recent scan results" } }
+      }
+    },
+    "/dashboard/graph-network": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Get IOC graph network data for visualization",
+        "responses": { "200": { "description": "Nodes and edges for graph rendering" } }
+      }
+    },
+    "/graph/stats": {
+      "get": {
+        "tags": ["Threat Graph"],
+        "summary": "Get IOC graph statistics",
+        "responses": { "200": { "description": "IOC count, link count, campaign count" } }
+      }
+    },
+    "/graph/campaigns": {
+      "get": {
+        "tags": ["Threat Graph"],
+        "summary": "List correlated threat campaigns",
+        "responses": { "200": { "description": "Array of campaigns with member counts and risk scores" } }
+      }
+    },
+    "/graph/campaigns/{id}": {
+      "get": {
+        "tags": ["Threat Graph"],
+        "summary": "Get campaign detail with grouped IOC indicators",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "Campaign members grouped by type, linked scans" } }
+      }
+    },
+    "/graph/ioc/{type}/{value}/scans": {
+      "get": {
+        "tags": ["Threat Graph"],
+        "summary": "Get scans linked to a specific IOC",
+        "parameters": [
+          { "name": "type", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "value", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Scans referencing this IOC" } }
+      }
+    },
+    "/graph/rebuild-campaigns": {
+      "post": {
+        "tags": ["Threat Graph"],
+        "summary": "Rebuild campaign clusters from IOC graph",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Rebuild result with campaign count" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/enrichment/status": {
+      "get": {
+        "tags": ["Enrichment"],
+        "summary": "Check enrichment service status and queue depth",
+        "responses": { "200": { "description": "Enrichment enabled flag, queue info" } }
+      }
+    },
+    "/enrichment/domain/{domain}": {
+      "get": {
+        "tags": ["Enrichment"],
+        "summary": "Get enrichment data for a domain (RDAP, DNS, CT logs)",
+        "parameters": [{ "name": "domain", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "RDAP registration, DNS records, CT certificates" } }
+      }
+    },
+    "/enrichment/enqueue": {
+      "post": {
+        "tags": ["Enrichment"],
+        "summary": "Enqueue a domain for background enrichment",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "domain": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Enqueue confirmation" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/correlation/matches": {
+      "get": {
+        "tags": ["Correlation"],
+        "summary": "Get template similarity matches between scans",
+        "responses": { "200": { "description": "Pairwise similarity matches with Jaccard scores" } }
+      }
+    },
+    "/correlation/recompute": {
+      "post": {
+        "tags": ["Correlation"],
+        "summary": "Recompute all pairwise template similarities",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Recomputation result" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/export/stix": {
+      "get": {
+        "tags": ["Export"],
+        "summary": "Export threat intelligence as STIX 2.1 bundle",
+        "responses": { "200": { "description": "STIX 2.1 JSON bundle" } }
+      }
+    },
+    "/export/misp/{campaignId}": {
+      "get": {
+        "tags": ["Export"],
+        "summary": "Export campaign as MISP event JSON",
+        "parameters": [{ "name": "campaignId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": { "200": { "description": "MISP event JSON" } }
+      }
+    },
+    "/export/dossier/{campaignId}": {
+      "get": {
+        "tags": ["Export"],
+        "summary": "Generate investigation dossier for a campaign",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "campaignId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": { "description": "Markdown-formatted investigation dossier" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/export/attack-mapping": {
+      "post": {
+        "tags": ["Export"],
+        "summary": "Map scan flags to MITRE ATT&CK techniques",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "flags": { "type": "array", "items": { "type": "object" } } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "ATT&CK technique mappings" } }
+      }
+    },
+    "/alerts/feed": {
+      "get": {
+        "tags": ["Alerts"],
+        "summary": "Get public threat alert feed",
+        "responses": { "200": { "description": "Array of active threat alerts" } }
+      }
+    },
+    "/alerts/create": {
+      "post": {
+        "tags": ["Alerts"],
+        "summary": "Broadcast a new public threat warning",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+                  "upiId": { "type": "string" },
+                  "domain": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Alert created successfully" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/reports/list": {
+      "get": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "List all takedown notices",
+        "responses": { "200": { "description": "Array of takedown records" } }
+      }
+    },
+    "/reports/takedowns": {
+      "get": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "List takedowns (alias for /reports/list)",
+        "responses": { "200": { "description": "Array of takedown records" } }
+      }
+    },
+    "/reports/status": {
+      "post": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "Update takedown notice status",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "status": { "type": "string", "enum": ["DISPATCHED_TO_DOT_NPCI", "BLOCKED_BY_DOT", "FROZEN_BY_NPCI", "COMPLETED"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Status updated" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/reports/cert-in-takedown": {
+      "post": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "Generate CERT-In / DoT / NPCI legal takedown notice",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targetDomain": { "type": "string" },
+                  "scamVpa": { "type": "string" },
+                  "targetPhone": { "type": "string" },
+                  "threatCategory": { "type": "string" },
+                  "campaignId": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Legal notice text and dispatch confirmation" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/reports/dot-dns-block": {
+      "post": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "Simulate DoT DNS block directive",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Simulated DoT block response" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/reports/npci-vpa-freeze": {
+      "post": {
+        "tags": ["Reports & Takedowns"],
+        "summary": "Simulate NPCI UPI VPA freeze directive",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Simulated NPCI freeze response" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/social/feed": {
+      "get": {
+        "tags": ["Social Monitor"],
+        "summary": "Get ingested social media posts feed",
+        "responses": { "200": { "description": "Array of social media posts with risk scores" } }
+      }
+    },
+    "/social/ingest": {
+      "post": {
+        "tags": ["Social Monitor"],
+        "summary": "Ingest a social media post for analysis",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Ingested post details" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/system/reset": {
+      "post": {
+        "tags": ["System"],
+        "summary": "Reset SQLite database and re-seed defaults",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Database reset complete" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/audit/log": {
+      "get": {
+        "tags": ["Audit Trail"],
+        "summary": "Get immutable audit log entries",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 200 } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Audit log entries with chain integrity" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/audit/verify-evidence": {
+      "get": {
+        "tags": ["Audit Trail"],
+        "summary": "Verify evidence chain integrity",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Evidence verification result" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/audit/evidence/{sha256}": {
+      "get": {
+        "tags": ["Audit Trail"],
+        "summary": "Retrieve specific evidence item by SHA-256 hash",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "sha256", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Evidence metadata and content" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/audit/verify": {
+      "get": {
+        "tags": ["Audit Trail"],
+        "summary": "Verify audit chain hash integrity",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Chain verification result" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/ml-status": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Check Python ML service status and available libraries",
+        "responses": { "200": { "description": "ML service readiness and library availability" } }
+      }
+    },
+    "/brandwatch/watchlist": {
+      "get": {
+        "tags": ["Brand Watch"],
+        "summary": "Get list of protected brand targets and generated typosquat variant stats",
+        "responses": { "200": { "description": "List of protected domains with generated variant counts" } }
+      }
+    },
+    "/brandwatch/scan": {
+      "post": {
+        "tags": ["Brand Watch"],
+        "summary": "Trigger proactive Certificate Transparency log scan for typosquat infrastructure",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "brand": { "type": "string", "example": "zerodha.com" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Proactive threat alerts discovered from CT logs" },
+          "403": { "description": "Requires admin role" }
+        }
+      }
+    },
+    "/brandwatch/alerts": {
+      "get": {
+        "tags": ["Brand Watch"],
+        "summary": "List proactive typosquat & CT-log threat alerts",
+        "responses": { "200": { "description": "Array of proactive threat alerts" } }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Authentication", "description": "JWT-based admin authentication" },
+    { "name": "Phishing Detection", "description": "Text and email phishing analysis with IOC extraction" },
+    { "name": "Media Forensics", "description": "Image ELA, audio FFT, video deepfake detection" },
+    { "name": "PKI Verification", "description": "RSA-2048 digital signature registry for official communications" },
+    { "name": "Brand Watch", "description": "Proactive Certificate Transparency typosquat & pre-campaign threat monitoring" },
+    { "name": "Dashboard", "description": "Aggregate statistics and recent activity" },
+    { "name": "Threat Graph", "description": "IOC correlation graph and campaign clustering" },
+    { "name": "Enrichment", "description": "RDAP, DNS, Certificate Transparency lookups (SSRF-guarded)" },
+    { "name": "Correlation", "description": "Template fingerprinting and similarity analysis" },
+    { "name": "Export", "description": "STIX 2.1, MISP, dossier, and ATT&CK mapping exports" },
+    { "name": "Alerts", "description": "Public threat warning broadcasts" },
+    { "name": "Reports & Takedowns", "description": "CERT-In/DoT/NPCI legal takedown generation" },
+    { "name": "Social Monitor", "description": "Social media scraper feed and ingestion" },
+    { "name": "Audit Trail", "description": "Immutable hash-chained audit log and evidence custody" },
+    { "name": "System", "description": "Database reset and ML service status" }
+  ]
+}
+

@@ -60,7 +60,14 @@ pip install -r requirements.txt
 ### Chrome/Edge Extension
 Load unpacked from `extension/` at `chrome://extensions`.
 
+### Interactive API Documentation (Swagger UI)
+Access interactive Swagger UI documentation at: **http://127.0.0.1:8000/api-docs**
+
+### Brand Watch — Proactive CT-Log Typosquat Monitoring
+Flips detection from reactive to proactive by monitoring Certificate Transparency (CT) logs for newly issued TLS certificates matching homoglyph and typosquat variants of protected capital market brands (`zerodha.com`, `groww.in`, `sebi.gov.in`, etc.) before phishing campaigns launch.
+
 ---
+
 
 ## 🔐 Authentication & Authorization
 
@@ -85,7 +92,88 @@ curl -X POST http://127.0.0.1:8000/reports/cert-in-takedown `
 
 **Configuration.** Set `JWT_SECRET` (32+ chars). The server refuses to start without it when `NODE_ENV=production`; in development it generates an ephemeral secret per process, so tokens do not survive a restart. Seeded default passwords are for local development only and are overridable via `SEED_ADMIN_PASSWORD`, `SEED_SEBI_PASSWORD`, and `SEED_INVESTOR_PASSWORD`. Rotate them before any non-local deployment.
 
-**Note on the role switcher.** The console's investor/admin toggle only shows or hides UI. It grants no privilege — every privileged action is authorized server-side from the bearer token.
+
+**Security Posture & Defensive Controls.**
+- **Helmet Security Headers:** `helmet()` middleware protects against XSS, clickjacking, MIME sniffing, and header disclosure (`contentSecurityPolicy: false` for dev build with CDN assets).
+- **Rate Limiting:** Public POST endpoints are protected by `express-rate-limit` per-IP buckets (30 req/min for text analysis, 10 req/min for media analysis).
+- **Input Length Caps:** Free-text payloads are capped at 50,000 characters with 400 responses above that limit to prevent regex DOS and DB bloat.
+- **CORS Policy:** Unrestricted in development mode; in `NODE_ENV=production`, origin is locked down to `process.env.CORS_ORIGIN`.
+- **Persistent ML Microservice:** `ml_service.py --serve` runs as a long-running subprocess over stdin/stdout JSON-RPC, loading heavy ML models (librosa, opencv, mediapipe) once at startup instead of cold-starting per request.
+
+
+### API Endpoint Reference
+
+All 49 routes in `server.js`, grouped by feature area.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| **Authentication** | | | |
+| `POST` | `/auth/login` | Public | PBKDF2 password verification, returns signed JWT |
+| `GET` | `/auth/me` | Auth | Returns current user identity and role |
+| **Phishing Analysis** | | | |
+| `POST` | `/phishing/analyze` | Public | Analyze text for phishing signals, typosquatting, scam language |
+| `POST` | `/phishing/upload-eml` | Public | Parse `.eml` file: MIME, DKIM, Received-chain forensics, IOCs |
+| **Media Forensics** | | | |
+| `POST` | `/media/analyze-image` | Public | DQT variance, EXIF extraction, ELA (Python: OpenCV + MediaPipe) |
+| `POST` | `/media/analyze-audio` | Public | 1024-pt FFT, ZCR, spectral flatness (Python: librosa + resemblyzer) |
+| `POST` | `/media/analyze-video` | Public | MP4 atom parsing, temporal flicker (Python: OpenCV temporal mesh) |
+| `GET` | `/media/preview/:filename` | Public | Serve media preview assets |
+| **Authenticity Verification (PKI)** | | | |
+| `POST` | `/verify/register` | Admin | Register official communication with RSA-2048 signature |
+| `POST` | `/verify/by-code` | Public | Verify communication by verification code |
+| `GET` | `/verify/by-code/:code` | Public | Verify communication by code (GET variant) |
+| `POST` | `/verify/by-content` | Public | Fuzzy-match text against registered communications |
+| `POST` | `/verify/by-file` | Public | Fuzzy-match uploaded file against registered communications |
+| `GET` | `/verify/registry` | Public | List all registered authentic communications |
+| `POST` | `/verify/check-text` | Public | Levenshtein fuzzy-match text (alias) |
+| **Dashboard** | | | |
+| `GET` | `/dashboard/stats` | Public | Live SQLite aggregate counts (scans, alerts, takedowns) |
+| `GET` | `/dashboard/recent` | Public | Last 10 scans with verdicts |
+| `GET` | `/dashboard/graph-network` | Public | Full IOC graph nodes and edges for visualization |
+| **IOC Graph & Campaigns** | | | |
+| `GET` | `/graph/stats` | Public | Graph node/edge/campaign counts |
+| `GET` | `/graph/campaigns` | Public | List all campaigns with member counts |
+| `GET` | `/graph/campaigns/:id` | Public | Campaign detail with all member indicators |
+| `GET` | `/graph/ioc/:type/:value/scans` | Public | "How do you know?" — scans that sighted a given IOC |
+| `POST` | `/graph/rebuild-campaigns` | Admin | Force recompute connected-component clustering |
+| **Enrichment (RDAP · DNS · CT)** | | | |
+| `GET` | `/enrichment/status` | Public | Queue depth and processing state |
+| `GET` | `/enrichment/domain/:domain` | Public | Cached enrichment data for a domain |
+| `POST` | `/enrichment/enqueue` | Admin | Manually enqueue a domain for enrichment |
+| **Cross-Case Correlation** | | | |
+| `GET` | `/correlation/matches` | Public | Voiceprint, pHash, and template similarity matches |
+| `POST` | `/correlation/recompute` | Admin | Recompute all cross-case similarity scores |
+| **Interoperability & Export** | | | |
+| `GET` | `/export/stix` | Public | STIX 2.1 bundle with deterministic IDs |
+| `GET` | `/export/misp/:campaignId` | Public | MISP event export for a campaign |
+| `GET` | `/export/dossier/:campaignId` | Admin | Full investigation dossier with limitations section |
+| `POST` | `/export/attack-mapping` | Public | MITRE ATT&CK technique mapping for flags |
+| **Alerts** | | | |
+| `GET` | `/alerts/feed` | Public | Active alerts feed |
+| `POST` | `/alerts/create` | Admin | Publish a new investor alert |
+| **Reports & Regulatory** | | | |
+| `GET` | `/reports/list` | Public | List all reports and takedown notices |
+| `GET` | `/reports/takedowns` | Public | List takedown notices |
+| `POST` | `/reports/status` | Admin | Update report/takedown status |
+| `POST` | `/reports/cert-in-takedown` | Admin | Generate CERT-In Section 70B takedown notice |
+| `POST` | `/reports/dot-dns-block` | Admin | Submit DoT DNS block request (institutional stub) |
+| `POST` | `/reports/npci-vpa-freeze` | Admin | Submit NPCI VPA freeze request (institutional stub) |
+| **Social Intelligence** | | | |
+| `GET` | `/social/feed` | Public | Social media intelligence feed |
+| `POST` | `/social/ingest` | Admin | Ingest social media post for analysis |
+| **System & Audit** | | | |
+| `POST` | `/system/reset` | Admin | Reset database to clean state |
+| `GET` | `/audit/log` | Admin | Tamper-evident audit log entries |
+| `GET` | `/audit/verify-evidence` | Admin | Verify evidence hash chain integrity |
+| `GET` | `/audit/evidence/:sha256` | Admin | Find all scans that submitted a given evidence artifact |
+| `GET` | `/audit/verify` | Admin | Verify audit log hash chain integrity |
+| `GET` | `/ml-status` | Public | Check Python ML service availability |
+| **Brand Watch (Proactive CT-Log)** | | | |
+| `GET` | `/brandwatch/watchlist` | Public | List protected brand targets and generated typosquat variant counts |
+| `POST` | `/brandwatch/scan` | Admin | Trigger CT-log Certificate Transparency scan for brand variants |
+| `GET` | `/brandwatch/alerts` | Public | Feed of proactive typosquat & CT-log threat alerts |
+
+| `GET` | `*` | Public | SPA fallback — serves frontend |
 
 ## 🧾 Audit Trail
 
@@ -118,7 +206,7 @@ node --test tests/phase4_correlation.test.js # Voiceprint, pHash, template match
 node --test tests/phase5_export.test.js     # STIX 2.1, MISP, ATT&CK, dossier
 ```
 
-**Benchmark caveat.** The reported 100% accuracy is measured on 10 hand-labelled messages that are also the development set — it is not a held-out benchmark and should not be read as a generalization estimate. See `docs/EVALUATION.md`. A known evasion: inserting a percentage between words (`"Guaranteed 500% returns"`) scores 0 while `"Guaranteed returns"` scores 55, because the pattern cannot span the intervening token.
+**Benchmark caveat.** The reported 100% accuracy is measured on 10 hand-labelled messages that are also the development set — it is not a held-out benchmark and should not be read as a generalization estimate. See `docs/EVALUATION.md`. A previously known evasion — inserting a percentage between words (`"Guaranteed 500% returns"`) — has been fixed; the regex now tolerates intervening non-word tokens. The remaining narrow gap is multi-word alphabetic phrases between qualifier and noun, which requires NLP-level parsing.
 
 ---
 

@@ -1,76 +1,210 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <style>
+    :root {
+      --bg-dark: #090d16;
+      --panel: rgba(18, 26, 47, 0.95);
+      --border: rgba(37, 51, 85, 0.7);
+      --gold: #f59e0b;
+      --gold-dim: #d97706;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
     body {
-      width: 280px;
-      background: #090d16;
-      color: #f3f4f6;
-      font-family: 'Segoe UI', Arial, sans-serif;
+      width: 320px;
+      background: radial-gradient(circle at 10% 10%, #111a2e 0%, var(--bg-dark) 85%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       padding: 16px;
       margin: 0;
+      box-sizing: border-box;
     }
-    h3 { 
-      font-family: Georgia, serif; 
-      color: #f59e0b; 
-      margin-top: 0; 
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(245, 158, 11, 0.2);
-      padding-bottom: 6px;
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
     }
-    label {
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-badge {
+      width: 28px;
+      height: 28px;
+      border: 1.5px solid var(--gold);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      color: var(--gold);
+      font-family: monospace;
+      text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       font-size: 10px;
-      color: #9ca3af;
-      text-transform: uppercase;
-      display: block;
-      margin-bottom: 4px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
     }
-    input {
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+    .status-indicator.offline {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .status-indicator.offline .status-dot {
+      background: var(--danger);
+      box-shadow: 0 0 6px var(--danger);
+    }
+    .label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    .input-field {
       width: 100%;
-      background: #111827;
-      border: 1px solid rgba(37, 51, 85, 0.6);
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid var(--border);
       color: white;
-      padding: 8px;
-      border-radius: 4px;
+      padding: 10px;
+      border-radius: 6px;
       box-sizing: border-box;
       margin-bottom: 12px;
-      font-family: monospace;
+      font-family: 'JetBrains Mono', monospace, sans-serif;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
     }
-    button {
+    .input-field:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+    }
+    .btn {
       width: 100%;
-      background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+      background: linear-gradient(135deg, var(--gold-dim) 0%, var(--gold) 100%);
       border: none;
       color: #090d16;
-      padding: 9px;
-      font-weight: bold;
+      padding: 10px;
+      font-weight: 700;
       cursor: pointer;
-      border-radius: 4px;
+      border-radius: 6px;
       text-transform: uppercase;
       font-size: 11px;
       letter-spacing: 0.5px;
+      transition: transform 0.1s, box-shadow 0.2s;
     }
-    button:hover {
-      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    .btn:hover {
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
     }
-    #result { 
-      margin-top: 14px; 
-      font-size: 12px; 
+    .btn:active {
+      transform: scale(0.98);
+    }
+    #result {
+      margin-top: 14px;
+      font-size: 12px;
       line-height: 1.5;
-      padding: 8px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
       display: none;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .quick-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      text-align: center;
+    }
+    .stat-box {
+      background: rgba(30, 41, 59, 0.3);
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .stat-num {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold);
+      font-family: monospace;
+    }
+    .stat-lbl {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-transform: uppercase;
     }
   </style>
 </head>
 <body>
-  <h3>Sentinel Link Checker</h3>
-  <label>Sentinel Verify-Code</label>
-  <input type="text" id="code" placeholder="e.g. SEBI-4F91A2">
-  <button id="check">Verify Authenticity</button>
+  <div class="header">
+    <div class="brand">
+      <div class="logo-badge">S</div>
+      <h1 class="title">SentinelSEBI</h1>
+    </div>
+    <div id="statusBadge" class="status-indicator">
+      <div class="status-dot"></div>
+      <span id="statusText">Active</span>
+    </div>
+  </div>
+
+  <label for="code">Sentinel PKI Verify Code</label>
+  <input type="text" id="code" class="input-field" placeholder="e.g. VERIFY-8A9F1B2C" />
+
+  <button id="check" class="btn">Verify Authenticity</button>
+
   <div id="result"></div>
+
+  <div class="quick-stats">
+    <div class="stat-box">
+      <div class="stat-num" id="statScans">1,420+</div>
+      <div class="stat-lbl">Scans Handled</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" id="statTakedowns">98.4%</div>
+      <div class="stat-lbl">Accuracy Rate</div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

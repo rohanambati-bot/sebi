@@ -1,0 +1,20 @@
+From: Zerodha Security Alert <security@zer0dha-kyc-verify.in>
+To: investor@example.com
+Subject: URGENT: Action Required - Blocked Demat Account Verification
+Date: Thu, 06 Aug 2026 10:15:00 +0530
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=zer0dha-kyc-verify.in; s=default; h=from:to:subject:date; bh=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=; b=invalid_signature_mock
+
+<!DOCTYPE html>
+<html>
+<body>
+<h2>Zerodha Account Suspension Warning</h2>
+<p>Dear Investor,</p>
+<p>Your Zerodha account has been temporarily flagged for unverified PAN-Aadhaar linking under SEBI directives.</p>
+<p><strong>Failure to verify within 24 hours will result in liquidation of all open equity positions.</strong></p>
+<p><a href="http://zer0dha-kyc-verify.in/login">Click here to verify your identity now</a></p>
+<br>
+<p>Regards,<br>Zerodha Risk & Compliance Team</p>
+</body>
+</html>

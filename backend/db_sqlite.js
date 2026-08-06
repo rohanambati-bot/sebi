@@ -350,6 +350,26 @@ db.serialize(() => {
       UNIQUE(fingerprint_a, fingerprint_b, kind)
     )
   `);
+  // 16. Brand Watch Proactive CT-Log Alerts
+  db.run(`
+    CREATE TABLE IF NOT EXISTS brandwatch_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      domain_variant TEXT UNIQUE NOT NULL,
+      target_brand TEXT NOT NULL,
+      brand_name TEXT NOT NULL,
+      cert_count INTEGER NOT NULL DEFAULT 1,
+      earliest_issuance TEXT,
+      latest_issuance TEXT,
+      related_domains_json TEXT,
+      risk_score INTEGER NOT NULL,
+      severity TEXT NOT NULL,
+      threat_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'NEW_THREAT_DETECTED',
+      created_at TEXT NOT NULL
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_brandwatch_brand ON brandwatch_alerts(target_brand)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_brandwatch_status ON brandwatch_alerts(status)`);
 });
 
 /**
@@ -392,7 +412,7 @@ function migrateLegacyUsers() {
 
           for (const row of legacyRows || []) {
             const salt = crypto.randomBytes(16).toString('hex');
-            const hash = crypto.pbkdf2Sync(row.password || '', salt, 1000, 64, 'sha512').toString('hex');
+            const hash = crypto.pbkdf2Sync(row.password || '', salt, 210000, 64, 'sha512').toString('hex');
             // Normalize legacy role naming to the values the RBAC layer checks.
             const role = row.role === 'sebi_admin' ? 'admin' : row.role;
 
@@ -530,7 +550,7 @@ function seedDefaultUsers() {
 
       const create = (username, password, role) => {
         const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+        const hash = crypto.pbkdf2Sync(password, salt, 210000, 64, 'sha512').toString('hex');
         db.run(
           `INSERT INTO users (username, password_hash, salt, role, created_at) VALUES (?, ?, ?, ?, ?)`,
           [username, hash, salt, role, new Date().toISOString()]
@@ -1347,6 +1367,122 @@ class DBSqlite {
         entriesChecked: (rows || []).length,
         headHash: expectedPrev === Audit.GENESIS_HASH ? null : expectedPrev,
         note: 'Chain is internally consistent. This does not prove the log was not rewritten wholesale; that requires an external timestamp anchor.',
+      });
+    });
+  }
+
+  // ─────────────────── Brand Watch Accessors ───────────────────
+  static addBrandwatchAlert(alert, callback) {
+    const query = `
+      INSERT INTO brandwatch_alerts (
+        domain_variant, target_brand, brand_name, cert_count,
+        earliest_issuance, latest_issuance, related_domains_json,
+        risk_score, severity, threat_type, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(domain_variant) DO UPDATE SET
+        cert_count = excluded.cert_count,
+        latest_issuance = excluded.latest_issuance,
+        risk_score = excluded.risk_score,
+        status = excluded.status
+    `;
+    const params = [
+      alert.domain_variant,
+      alert.target_brand,
+      alert.brand_name || alert.target_brand,
+      alert.cert_count || 1,
+      alert.earliest_issuance || new Date().toISOString(),
+      alert.latest_issuance || new Date().toISOString(),
+      JSON.stringify(alert.related_domains || []),
+      alert.risk_score || 85,
+      alert.severity || 'high',
+      alert.threat_type || 'Proactive CT-Log Typosquat Infrastructure',
+      alert.status || 'NEW_THREAT_DETECTED',
+      alert.created_at || new Date().toISOString(),
+    ];
+
+    db.run(query, params, function (err) {
+      if (callback) callback(err, this ? this.lastID : null);
+    });
+  }
+
+  static getBrandwatchAlerts(callback) {
+    db.all(`SELECT * FROM brandwatch_alerts ORDER BY created_at DESC LIMIT 100`, (err, rows) => {
+      if (err) return callback(err);
+      const parsed = (rows || []).map((r) => ({
+        ...r,
+        related_domains: r.related_domains_json ? JSON.parse(r.related_domains_json) : [],
+      }));
+      callback(null, parsed);
+    });
+  }
+
+  /**
+   * Reset the database to a clean baseline state.
+   *
+   * Deletes all user-generated data (scans, IOCs, campaigns, alerts, takedowns,
+   * social posts, registered communications, enrichment cache, fingerprints, and
+   * brandwatch alerts) and re-seeds the default seed rows. The audit log and
+   * evidence artifacts are intentionally NOT cleared — they are the chain of
+   * custody and clearing them would constitute evidence destruction.
+   *
+   * The SYSTEM_RESET audit entry is written before the truncation begins, so
+   * the actor and timestamp are preserved even in the reset state.
+   *
+   * @param {function} callback - (err, result) where result.tablesCleared is
+   *   the number of tables truncated.
+   */
+  static resetDatabase(callback) {
+    const tablesToClear = [
+      'campaign_members',
+      'campaigns',
+      'scan_iocs',
+      'ioc_links',
+      'iocs',
+      'fingerprint_matches',
+      'fingerprints',
+      'enrichment_cache',
+      'social_posts',
+      'brandwatch_alerts',
+      'scans',
+      'threat_alerts',
+      'takedowns',
+      'registered_communications',
+    ];
+
+    db.serialize(() => {
+      db.run('PRAGMA foreign_keys = OFF');
+
+      let cleared = 0;
+      let errored = null;
+
+      for (const table of tablesToClear) {
+        db.run(`DELETE FROM ${table}`, (err) => {
+          if (err) {
+            console.error(`[reset] failed to clear ${table}: ${err.message}`);
+            errored = err;
+          } else {
+            cleared++;
+          }
+        });
+      }
+
+      // Re-seed the two baseline threat_alerts rows after clearing
+      db.run(`
+        INSERT INTO threat_alerts (title, description, severity, date_str, upi_id, domain)
+        VALUES
+          ('Fake Telegram Stock Tip Group Flagged', 'Scammers impersonating SEBI registered research analysts offering 500% guaranteed returns.', 'high', '2026-07-22', 'invest.now@oksbi', 'sebi-official-tips.xyz'),
+          ('Spoofed Broker Settlement Emails Detected', 'Phishing campaign spoofing Zerodha contract notes to steal trading credentials.', 'critical', '2026-07-21', 'settlement@paytm', 'broker-zerodha.online')
+      `);
+
+      // Re-seed the baseline takedown row
+      db.run(`
+        INSERT INTO takedowns (id, target_domain, scam_vpa, target_phone, threat_category, status, dot_dns_status, npci_vpa_status, date_str, legal_notice_text)
+        VALUES ('CERT-IN-1721642400000', 'sebi-official-tips.xyz', 'invest.now@oksbi', '+91 9876543210', 'Securities Market Impersonation Fraud', 'DISPATCHED_TO_DOT_NPCI', 'BLOCKED_BY_DOT', 'FROZEN_BY_NPCI', '2026-07-22', 'CERT-In Incident Report Sec 70B IT Act 2000')
+      `);
+
+      db.run('PRAGMA foreign_keys = ON', () => {
+        if (errored) return callback(errored);
+        callback(null, { tablesCleared: tablesToClear.length, reseeded: true });
       });
     });
   }

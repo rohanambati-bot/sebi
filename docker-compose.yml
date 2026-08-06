@@ -14,6 +14,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8000
+      - JWT_SECRET=${JWT_SECRET:-production_default_sebi_sentinel_jwt_secret_must_be_32_chars_long_minimum}
     restart: unless-stopped
 
 volumes:

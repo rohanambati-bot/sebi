@@ -45,6 +45,7 @@ class VideoEngine {
       try { fs.unlinkSync(tempPath); } catch {}
 
       if (mlResult.success && !mlResult.fallback) {
+        const mlMetrics = mlResult.metrics || {};
         return {
           risk_score: mlResult.risk_score || 0,
           verdict: mlResult.verdict === 'LIKELY_DEEPFAKE' ? 'DEEPFAKE_VIDEO'
@@ -60,9 +61,13 @@ class VideoEngine {
           landmarkDeltaMean: mlResult.landmark_delta_mean ?? null,
           landmarkDeltaStd: mlResult.landmark_delta_std ?? null,
           luminanceStd: mlResult.luminance_std ?? null,
+          spatialContrastVariance: mlMetrics.avg_face_sharpness || 0.5,
+          temporalFlickerScore: mlMetrics.flicker_incidents || 0,
           metrics: {
-            frames_analyzed: mlResult.frame_count || 0,
-            face_flicker_count: mlResult.face_flicker_count || 0,
+            frames_analyzed: mlResult.frame_count || mlMetrics.frames_analyzed || 0,
+            sharpness_ratio: mlMetrics.sharpness_ratio ?? 1.0,
+            avg_temporal_correlation: mlMetrics.avg_temporal_correlation ?? 1.0,
+            face_flicker_count: mlResult.face_flicker_count || mlMetrics.flicker_incidents || 0,
             face_detection_ratio: mlResult.face_detection_ratio || 0,
           },
           evidence: mlResult.evidence || [],
@@ -92,7 +97,8 @@ class VideoEngine {
         spatialContrastVariance: 0,
         temporalFlickerScore: 0,
         model: 'JS Fallback: MP4 Container Atom & Temporal Frame Signal Analyzer',
-        metrics: { frames_analyzed: 0, sharpness_ratio: 0, avg_temporal_correlation: 0 },
+        metrics: { frames_analyzed: 0, sharpness_ratio: 1.0, avg_temporal_correlation: 1.0 },
+        evidence: ['Video file buffer too small to parse MP4 container structures.'],
         analysis: 'Video file buffer too small to parse MP4 container structures.'
       };
     }
@@ -110,6 +116,15 @@ class VideoEngine {
     const sharpnessRatio = parseFloat((spatialVariance * 3.2).toFixed(2));
     const avgTemporalCorrelation = parseFloat((1.0 - temporalFlicker * 0.5).toFixed(2));
 
+    const evidenceList = [];
+    if (isDeepfake) {
+      evidenceList.push(`Spatial contrast variance score (${spatialVariance.toFixed(3)}) indicates potential facial area blurring/softness.`);
+      evidenceList.push(`Temporal flicker score (${temporalFlicker.toFixed(3)}) flagged potential frame-by-frame luminance inconsistency.`);
+    } else {
+      evidenceList.push(`MP4 atoms found (${mp4Atoms.foundAtoms.join(', ') || 'standard'}). No structural container anomalies.`);
+      evidenceList.push(`Temporal frame delta analysis across ${framesAnalyzed} frames showed natural motion stability.`);
+    }
+
     return {
       risk_score: deepfakeScore,
       verdict: isDeepfake ? 'DEEPFAKE_VIDEO' : 'GENUINE_VIDEO_BROADCAST',
@@ -122,6 +137,7 @@ class VideoEngine {
         sharpness_ratio: sharpnessRatio,
         avg_temporal_correlation: avgTemporalCorrelation,
       },
+      evidence: evidenceList,
       analysis: isDeepfake
         ? `MP4 Container & Temporal Delta Analysis (${framesAnalyzed} frames analyzed, flicker: ${temporalFlicker.toFixed(3)}) detected facial boundary lighting inconsistencies.`
         : `MP4 Container & Temporal Delta Analysis (${framesAnalyzed} frames analyzed) confirmed consistent facial lighting and smooth frame motion.`,

@@ -12,8 +12,21 @@ const { parse: parseDomain } = require('tldts');
 const IocExtractor = require('./ioc_extractor');
 
 const OFFICIAL_DOMAINS = [
-  'sebi.gov.in', 'zerodha.com', 'groww.in', 'angelone.in', 'icicidirect.com',
-  'hdfcsec.com', 'nifty.com', 'nseindia.com', 'bseindia.com', 'upstox.com',
+  // Regulator
+  'sebi.gov.in',
+  // Depositories (NSDL/CDSL — source of P23 false negative in evaluation)
+  'nsdl.co.in', 'nsdl.com', 'ndml.in',
+  'cdslindia.com', 'cvlkra.com',
+  // Fund regulator & AMFI
+  'amfiindia.com',
+  // Insurance regulator
+  'irdai.gov.in', 'irda.gov.in',
+  // Exchanges
+  'nseindia.com', 'bseindia.com', 'nifty.com', 'mcxindia.com', 'ncdex.com',
+  // Brokers
+  'zerodha.com', 'groww.in', 'angelone.in', 'icicidirect.com',
+  'hdfcsec.com', 'upstox.com', 'sharekhan.com', 'kotaksecurities.com',
+  'motilaloswal.com', '5paisa.com',
 ];
 
 // Terms whose presence, combined with a non-official sender/link domain,
@@ -147,7 +160,7 @@ class PhishingEngine {
     }
 
     // 4. English Pattern & Scam Signature Checks
-    if (/(?:guaranteed|assured|100%|certain|fixed|monthly)\s*(?:returns?|profits?|gains?|income)/i.test(content) || content.includes('50%')) {
+    if (/(?:guaranteed|assured|100%|certain|fixed|monthly)[\W\d]{0,20}(?:returns?|profits?|gains?|income)/i.test(content) || content.includes('50%')) {
       cumulativeRiskScore += 35;
       flags.push({
         type: 'scam_return_language',

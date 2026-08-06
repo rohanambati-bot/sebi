@@ -10,6 +10,8 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -31,6 +33,9 @@ const { ExportEngine } = require('./engines/export_engine');
 const EnrichmentQueue = require('./enrichment_queue');
 const NetGuard = require('./net_guard');
 const { checkMLStatus } = require('./engines/ml_bridge');
+const BrandWatchEngine = require('./engines/brandwatch_engine');
+const swaggerUi = require('swagger-ui-express');
+const openApiSpec = require('./openapi.json');
 
 const app = express();
 const upload = multer({ limits: { fileSize: 50 * 1024 * 1024 } });
@@ -45,9 +50,43 @@ const enrichmentQueue = new EnrichmentQueue(DBSqlite);
 // a client forge its own source IP in the audit log.
 app.set('trust proxy', 1);
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// ── CORS: open in dev, restricted in production ──────────────────────────
+// In production, set CORS_ORIGIN to the allowed frontend origin.
+if (process.env.NODE_ENV === 'production' && process.env.CORS_ORIGIN) {
+  app.use(cors({ origin: process.env.CORS_ORIGIN.split(','), credentials: true }));
+} else {
+  app.use(cors());
+}
+
+// ── Security Headers (Helmet) ────────────────────────────────────────────
+// Content-Security-Policy is disabled for the hackathon build because the
+// frontend loads Chart.js / QRious from CDN and uses inline styles.
+// Production deployments should enable CSP with a strict source allowlist.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// ── Rate Limiting on public analysis endpoints ───────────────────────────
+// Generous enough for demos, tight enough to show abuse awareness.
+const analysisLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute window
+  max: 30,                   // 30 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: 'Too many analysis requests from this IP. Please try again shortly.' },
+});
+
+const mediaLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,                   // media analysis is heavier — 10 per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: 'Too many media analysis requests from this IP. Please try again shortly.' },
+});
+
+// Maximum text length for free-text request bodies (50 KB).
+const MAX_TEXT_LENGTH = 50000;
 
 // Serve static frontend & extension
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -86,6 +125,26 @@ function audit(req, action, { targetType, targetId, outcome = 'SUCCESS', metadat
   });
 }
 
+/**
+ * Strip HTML tags and null bytes from free-text strings before they are
+ * persisted to the database or echoed back in API responses.
+ *
+ * This is not a full HTML-sanitisation library — it is a lightweight defence-
+ * in-depth measure for fields that are plain text by contract (alert titles,
+ * social post content, etc.). It removes:
+ *   - HTML/XML tags   (<script>alert(1)</script> → alert(1))
+ *   - Null bytes      (can truncate strings in some DB drivers)
+ *
+ * For fields that might legitimately contain rich text in the future, replace
+ * this with a dedicated library such as DOMPurify (server-side via jsdom).
+ */
+function sanitizeText(value) {
+  if (value === null || value === undefined) return value;
+  return String(value)
+    .replace(/[\u0000]/g, '')          // strip null bytes
+    .replace(/<[^>]*>/g, '');          // strip HTML/XML tags
+}
+
 /** Attribution fields stamped onto every persisted scan row. */
 function actorFields(req) {
   return {
@@ -120,10 +179,19 @@ function ingestGraph(scanId, { analysis, forensics }) {
 
   if (nodes.length === 0) return;
 
-  DBSqlite.ingestScanGraph({ scanId, nodes, edges }).then(() => {
-    // Clustering is only meaningful once edges exist, and one new edge can
-    // merge two previously separate campaigns, so recompute after each ingest.
+let rebuildCampaignsTimer = null;
+function scheduleCampaignRebuild(delayMs = 2000) {
+  if (rebuildCampaignsTimer) clearTimeout(rebuildCampaignsTimer);
+  rebuildCampaignsTimer = setTimeout(() => {
+    rebuildCampaignsTimer = null;
     DBSqlite.rebuildCampaigns(() => {});
+  }, delayMs);
+}
+
+  DBSqlite.ingestScanGraph({ scanId, nodes, edges }).then(() => {
+    // Clustering is debounced to avoid N full connected-components recomputations
+    // during rapid scan ingestion.
+    scheduleCampaignRebuild(2000);
   });
 
   // Phase 3: queue domain enrichment. Async and non-blocking — the verdict has
@@ -176,7 +244,7 @@ app.post('/auth/login', (req, res) => {
 
     let passwordValid = false;
     try {
-      const hash = crypto.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512').toString('hex');
+      const hash = crypto.pbkdf2Sync(password, user.salt, 210000, 64, 'sha512').toString('hex');
 
       // timingSafeEqual needs equal-length inputs; hex digests of the same
       // algorithm always match in length, so a mismatch means a malformed row.
@@ -220,10 +288,13 @@ app.get('/auth/me', requireAuth, (req, res) => {
 });
 
 // 2. PHISHING ENGINE & EML UPLOAD
-app.post('/phishing/analyze', (req, res) => {
+app.post('/phishing/analyze', analysisLimiter, (req, res) => {
   const { text, sender, channel } = req.body || {};
   if (!text || !text.trim()) {
     return res.status(400).json({ detail: 'text is required' });
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return res.status(400).json({ detail: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` });
   }
 
   const result = PhishingEngine.analyzeText(text, sender);
@@ -256,7 +327,7 @@ app.post('/phishing/analyze', (req, res) => {
   });
 });
 
-app.post('/phishing/upload-eml', upload.single('file'), async (req, res) => {
+app.post('/phishing/upload-eml', mediaLimiter, upload.single('file'), async (req, res) => {
   const fileBuffer = req.file ? req.file.buffer : Buffer.from(req.body.emlContent || '', 'utf8');
   const fileName = req.file ? req.file.originalname : (req.body.fileName || 'email.eml');
 
@@ -384,9 +455,27 @@ function retainUploadEvidence(req, mimeType, fileName) {
   return Evidence.retain(req.file.buffer, { mimeType, originalFilename: fileName });
 }
 
+/**
+ * Safely resolve and validate an input Buffer for media analysis routes.
+ * Returns null if no file upload or valid base64/binary string is supplied.
+ */
+function parseInputBuffer(req, bodyKey) {
+  if (req.file && Buffer.isBuffer(req.file.buffer)) return req.file.buffer;
+  const raw = req.body ? (req.body[bodyKey] || req.body.file || req.body.data) : null;
+  if (Buffer.isBuffer(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    const base64Data = raw.replace(/^data:[^;]+;base64,/, '');
+    try { return Buffer.from(base64Data, 'base64'); } catch { return null; }
+  }
+  return null;
+}
+
 // 3. MEDIA FORENSICS (IMAGE, AUDIO, VIDEO)
-app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
-  const imageInput = req.file ? req.file.buffer : (req.body.image || req.body.file || req.body);
+app.post('/media/analyze-image', mediaLimiter, upload.single('file'), async (req, res) => {
+  const imageInput = parseInputBuffer(req, 'image');
+  if (!imageInput || imageInput.length === 0) {
+    return res.status(400).json({ detail: 'No valid image file or binary payload provided' });
+  }
   const fileName = req.file ? req.file.originalname : 'uploaded_image.jpg';
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'image/jpeg', fileName);
 
@@ -452,8 +541,11 @@ app.post('/media/analyze-image', upload.single('file'), async (req, res) => {
   });
 });
 
-app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
-  const audioInput = req.file ? req.file.buffer : (req.body.audio || req.body.file || req.body);
+app.post('/media/analyze-audio', mediaLimiter, upload.single('file'), async (req, res) => {
+  const audioInput = parseInputBuffer(req, 'audio');
+  if (!audioInput || audioInput.length === 0) {
+    return res.status(400).json({ detail: 'No valid audio file or binary payload provided' });
+  }
   const fileName = req.file ? req.file.originalname : 'uploaded_audio.wav';
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'audio/wav', fileName);
 
@@ -515,8 +607,11 @@ app.post('/media/analyze-audio', upload.single('file'), async (req, res) => {
   });
 });
 
-app.post('/media/analyze-video', upload.single('file'), async (req, res) => {
-  const videoInput = req.file ? req.file.buffer : (req.body.video || req.body.file || req.body);
+app.post('/media/analyze-video', mediaLimiter, upload.single('file'), async (req, res) => {
+  const videoInput = parseInputBuffer(req, 'video');
+  if (!videoInput || videoInput.length === 0) {
+    return res.status(400).json({ detail: 'No valid video file or binary payload provided' });
+  }
   const fileName = req.file ? req.file.originalname : 'uploaded_video.mp4';
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'video/mp4', fileName);
 
@@ -577,7 +672,11 @@ app.get('/media/preview/:filename', (req, res) => {
 // investors must be able to check a code without an account.
 app.post('/verify/register', requireRole('admin'), (req, res) => {
   const { issuerId, issuerName, content } = req.body || {};
-  const record = verifyEngine.registerCommunication({ issuerId, issuerName, content });
+  const record = verifyEngine.registerCommunication({
+    issuerId: sanitizeText(issuerId),
+    issuerName: sanitizeText(issuerName),
+    content: sanitizeText(content),
+  });
 
   DBSqlite.addRegisteredComm({ ...record, user_id: req.user.id }, () => {
     audit(req, 'VERIFY_REGISTER', {
@@ -621,6 +720,9 @@ app.get('/verify/by-code/:code', (req, res) => {
 
 app.post('/verify/by-content', (req, res) => {
   const { text } = req.body || {};
+  if (text && text.length > MAX_TEXT_LENGTH) {
+    return res.status(400).json({ detail: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` });
+  }
   const result = verifyEngine.checkTextFuzzy(text);
   res.json(result);
 });
@@ -639,6 +741,9 @@ app.get('/verify/registry', (req, res) => {
 
 app.post('/verify/check-text', (req, res) => {
   const { text } = req.body || {};
+  if (text && text.length > MAX_TEXT_LENGTH) {
+    return res.status(400).json({ detail: `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` });
+  }
   const result = verifyEngine.checkTextFuzzy(text);
   res.json(result);
 });
@@ -1028,12 +1133,12 @@ app.get('/alerts/feed', (req, res) => {
 app.post('/alerts/create', requireRole('admin'), (req, res) => {
   const { title, description, severity, upiId, domain } = req.body || {};
   const alert = {
-    title: title || 'New Scam Warning',
-    description: description || 'Reported scam campaign targeting investors.',
-    severity: severity || 'high',
+    title: sanitizeText(title) || 'New Scam Warning',
+    description: sanitizeText(description) || 'Reported scam campaign targeting investors.',
+    severity: sanitizeText(severity) || 'high',
     date: new Date().toISOString().split('T')[0],
-    upiId: upiId || 'N/A',
-    domain: domain || 'N/A'
+    upiId: sanitizeText(upiId) || 'N/A',
+    domain: sanitizeText(domain) || 'N/A'
   };
 
   DBSqlite.addAlert(alert, (err, id) => {
@@ -1248,27 +1353,64 @@ app.get('/social/feed', (req, res) => {
 
 app.post('/social/ingest', requireRole('admin'), (req, res) => {
   const { platform, author, content } = req.body || {};
+
+  // Sanitize free-text fields before persisting (fix #5 — XSS defence in depth)
+  const safeContent  = sanitizeText(content)  || 'Guaranteed stock tips group link.';
+  const safePlatform = sanitizeText(platform) || 'Telegram';
+  const safeAuthor   = sanitizeText(author)   || '@unverified_channel';
+
+  // Previously hardcoded to 92 regardless of content. Now run the text through
+  // PhishingEngine so the score reflects what was actually submitted (fix #6).
+  const analysis = PhishingEngine.analyzeText(safeContent);
+
   const post = {
-    platform: platform || 'Telegram',
-    author: author || '@unverified_channel',
-    content: content || 'Guaranteed stock tips group link.',
-    riskScore: 92,
+    platform: safePlatform,
+    author: safeAuthor,
+    content: safeContent,
+    riskScore: analysis.risk_score,
     flaggedAt: new Date().toISOString()
   };
 
   DBSqlite.addSocialPost(post, (err, id) => {
     audit(req, 'SOCIAL_INGEST', {
       targetType: 'social_post', targetId: id,
-      metadata: { platform: post.platform, author: post.author },
+      metadata: {
+        platform: post.platform,
+        author: post.author,
+        risk_score: post.riskScore,
+        verdict: analysis.verdict,
+        flags: (analysis.flags || []).map((f) => f.type),
+      },
     });
-    res.json({ success: true, post: { id, ...post } });
+    res.json({ success: true, post: { id, ...post }, analysis: { verdict: analysis.verdict, risk_score: analysis.risk_score, flags: analysis.flags } });
   });
 });
 
 // 9. SYSTEM RESET
 app.post('/system/reset', requireRole('admin'), (req, res) => {
-  audit(req, 'SYSTEM_RESET', { targetType: 'system', targetId: 'sentinel.db' });
-  res.json({ success: true, message: 'System database reset available.' });
+  // Audit the reset BEFORE it executes — the audit log is intentionally NOT
+  // cleared by resetDatabase (clearing it would constitute evidence destruction),
+  // but writing the entry first ensures the actor/timestamp survive the wipe.
+  audit(req, 'SYSTEM_RESET', {
+    targetType: 'system',
+    targetId: 'sentinel.db',
+    metadata: { note: 'All scan data, IOCs, campaigns, alerts, takedowns, and social posts cleared. Audit log and evidence chain preserved.' },
+  });
+
+  DBSqlite.resetDatabase((err, result) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        detail: `Database reset failed: ${err.message}`,
+      });
+    }
+    res.json({
+      success: true,
+      message: 'Database reset to clean baseline. Scan history, IOC graph, campaigns, alerts, takedowns, social posts, enrichment cache, and registered communications cleared. Audit log and evidence artifacts preserved.',
+      tablesCleared: result.tablesCleared,
+      reseeded: result.reseeded,
+    });
+  });
 });
 
 // 11. AUDIT TRAIL (Phase 0 item 0.3)
@@ -1328,6 +1470,41 @@ app.get('/ml-status', async (req, res) => {
     });
   }
 });
+
+// 11. BRAND WATCH — PROACTIVE CT-LOG TYPOSQUAT DETECTION
+app.get('/brandwatch/watchlist', (req, res) => {
+  res.json({ watchlist: BrandWatchEngine.getWatchlist() });
+});
+
+app.post('/brandwatch/scan', requireRole('admin'), async (req, res) => {
+  const { brand } = req.body || {};
+  try {
+    const scanResult = await BrandWatchEngine.scanBrand(brand);
+    for (const alert of scanResult.alerts || []) {
+      DBSqlite.addBrandwatchAlert(alert);
+    }
+    audit(req, 'BRANDWATCH_SCAN', {
+      targetType: 'brandwatch',
+      metadata: { brand: brand || 'ALL', alertsFound: scanResult.alertsFound },
+    });
+    res.json(scanResult);
+  } catch (err) {
+    res.status(500).json({ detail: `Brand Watch scan failed: ${err.message}` });
+  }
+});
+
+app.get('/brandwatch/alerts', (req, res) => {
+  DBSqlite.getBrandwatchAlerts((err, alerts) => {
+    if (err) return res.status(500).json({ detail: 'Failed to fetch Brand Watch alerts' });
+    res.json({ alerts: alerts || [] });
+  });
+});
+
+// Interactive API documentation (Swagger UI)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'SentinelSEBI API Docs',
+}));
 
 // SPA Fallback
 app.get('*', (req, res) => {

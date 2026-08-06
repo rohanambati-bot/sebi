@@ -17,11 +17,13 @@ process.env.SENTINEL_DB_PATH = TMP_DB;
 process.env.JWT_SECRET = 'test_secret_at_least_thirty_two_chars_long_xx';
 
 const { app } = require('../server');
+const DBSqlite = require('../db_sqlite');
 
 let baseUrl;
 let server;
 
 test.before(async () => {
+  await DBSqlite.ready;
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       baseUrl = `http://127.0.0.1:${server.address().port}`;
