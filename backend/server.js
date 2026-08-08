@@ -1619,7 +1619,10 @@ app.get('/feed/csv', (req, res) => {
   DBSqlite.getAllIocs((err, rows) => {
     if (err) return res.status(500).json({ detail: 'Failed to fetch threat intelligence feed' });
     const header = 'type,value,confidence_score,created_at\n';
-    const lines = (rows || []).map(r => `${r.type},"${r.value}",${r.confidence_score || 85},"${r.created_at}"`).join('\n');
+    const lines = (rows || []).map(r => {
+      const ts = r.first_seen || r.created_at || r.firstSeen || new Date().toISOString();
+      return `${r.type},"${r.value}",${r.max_risk_score || r.confidence || 85},"${ts === 'undefined' ? new Date().toISOString() : ts}"`;
+    }).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="sentinel_threat_intel_feed.csv"');
     res.send(header + lines);

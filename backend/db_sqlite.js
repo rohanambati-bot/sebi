@@ -1114,6 +1114,10 @@ class DBSqlite {
     );
   }
 
+  static getAllIocs(callback) {
+    db.all(`SELECT * FROM iocs ORDER BY sighting_count DESC, id ASC`, [], callback);
+  }
+
   static getIocByValue(type, value, callback) {
     db.get(`SELECT * FROM iocs WHERE type = ? AND value = ?`, [type, value], callback);
   }
