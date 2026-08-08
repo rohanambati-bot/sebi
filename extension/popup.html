@@ -14,14 +14,22 @@
       --success: #10b981;
       --danger: #ef4444;
     }
-    body {
-      width: 320px;
+    html, body {
+      width: 340px;
+      margin: 0;
+      padding: 0;
       background: radial-gradient(circle at 10% 10%, #111a2e 0%, var(--bg-dark) 85%);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      padding: 16px;
-      margin: 0;
       box-sizing: border-box;
+    }
+    .popup-container {
+      width: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     .header {
       display: flex;
@@ -29,7 +37,6 @@
       justify-content: space-between;
       border-bottom: 1px solid var(--border);
       padding-bottom: 10px;
-      margin-bottom: 14px;
     }
     .brand {
       display: flex;
@@ -102,7 +109,7 @@
       padding: 10px;
       border-radius: 6px;
       box-sizing: border-box;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       font-family: 'JetBrains Mono', monospace, sans-serif;
       font-size: 12px;
       outline: none;
@@ -133,7 +140,7 @@
       transform: scale(0.98);
     }
     #result {
-      margin-top: 14px;
+      margin-top: 8px;
       font-size: 12px;
       line-height: 1.5;
       padding: 10px 12px;
@@ -151,8 +158,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      margin-top: 14px;
-      padding-top: 12px;
+      padding-top: 10px;
       border-top: 1px solid rgba(255,255,255,0.06);
       text-align: center;
     }
@@ -176,32 +182,69 @@
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="brand">
-      <div class="logo-badge">S</div>
-      <h1 class="title">SentinelSEBI</h1>
+  <div class="popup-container">
+    <div class="header">
+      <div class="brand">
+        <div class="logo-badge">S</div>
+        <h1 class="title">SentinelSEBI</h1>
+      </div>
+      <div id="statusBadge" class="status-indicator">
+        <div class="status-dot"></div>
+        <span id="statusText">Active</span>
+      </div>
     </div>
-    <div id="statusBadge" class="status-indicator">
-      <div class="status-dot"></div>
-      <span id="statusText">Active</span>
+
+    <!-- Persistent User Session & Verification Card -->
+    <div id="userSessionCard" style="background: rgba(30, 41, 59, 0.5); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;">
+      <!-- View A: Logged Out / Initial One-Time Setup -->
+      <div id="sessionSetupBox">
+        <div style="font-size:11px; font-weight:700; color:var(--gold); margin-bottom:4px;">🔑 One-Time User Email Verification</div>
+        <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">Enter your email once to activate persistent protection and attribute scam reports to your profile.</div>
+        <input type="email" id="userEmailInput" class="input-field" style="margin-bottom:8px; font-size:11px; padding:8px;" placeholder="e.g. investor@sebi.gov.in" />
+        <button id="activateSessionBtn" class="btn" style="padding:8px; font-size:10px;">Activate Protection Session</button>
+      </div>
+
+      <!-- View B: Logged In / Verified Session -->
+      <div id="sessionActiveBox" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:10px; font-family:monospace; color:var(--success); font-weight:700;">✅ VERIFIED SHIELD USER</div>
+            <div id="displayUserEmail" style="font-size:11px; font-weight:700; color:#fff; word-break:break-all;">investor@example.com</div>
+          </div>
+          <button id="logoutBtn" style="background:transparent; border:none; color:var(--text-muted); font-size:10px; cursor:pointer; text-decoration:underline;">Switch</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <label for="code">Sentinel PKI Verify Code</label>
-  <input type="text" id="code" class="input-field" placeholder="e.g. VERIFY-8A9F1B2C" />
-
-  <button id="check" class="btn">Verify Authenticity</button>
-
-  <div id="result"></div>
-
-  <div class="quick-stats">
-    <div class="stat-box">
-      <div class="stat-num" id="statScans">1,420+</div>
-      <div class="stat-lbl">Scans Handled</div>
+    <!-- Live Page Risk Shield Card -->
+    <div id="tabShieldCard" style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span id="tabShieldTier" style="font-size:11px; font-weight:800; color:#10b981; font-family:monospace;">🟢 SAFE CONTENT</span>
+        <span id="tabShieldScore" style="font-size:11px; font-weight:800; background:#10b981; color:#000; padding:2px 6px; border-radius:4px; font-family:monospace;">0% RISK</span>
+      </div>
+      <div id="tabShieldDesc" style="font-size:11.5px; color:var(--text); margin-bottom:6px; line-height:1.4;">Active tab content audited cleanly. No scam indicators detected.</div>
+      <div id="sebiLogBadge" style="font-size:10px; color:#10b981; font-weight:600; font-family:monospace;">
+        ⚡ SEBI Database: Audited &amp; Logged
+      </div>
     </div>
-    <div class="stat-box">
-      <div class="stat-num" id="statTakedowns">98.4%</div>
-      <div class="stat-lbl">Accuracy Rate</div>
+
+    <!-- PKI Verification Box -->
+    <div>
+      <label for="code" class="label">Sentinel PKI Verify Code</label>
+      <input type="text" id="code" class="input-field" placeholder="e.g. VERIFY-8A9F1B2C" />
+      <button id="check" class="btn">Verify Authenticity</button>
+      <div id="result"></div>
+    </div>
+
+    <div class="quick-stats">
+      <div class="stat-box">
+        <div class="stat-num" id="statScans">1,420+</div>
+        <div class="stat-lbl">Scans Handled</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statTakedowns">98.4%</div>
+        <div class="stat-lbl">Accuracy Rate</div>
+      </div>
     </div>
   </div>
 

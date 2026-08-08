@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
   "name": "SentinelSEBI — Investor Protection Shield",
-  "version": "1.1.0",
-  "description": "Real-time AI-driven investor protection shield for webmail, messaging apps, and financial forums. Highlights SEBI-verified communications and flags scam VPA handles & typosquat links.",
+  "version": "1.2.0",
+  "description": "Real-time AI-driven investor protection shield for webmail, WhatsApp, Telegram, and financial forums. Automatically flags scams, sets dynamic risk badges, and logs evidence to SEBI database.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "tabs",
+    "contextMenus",
+    "notifications"
   ],
   "host_permissions": [
     "http://127.0.0.1:8000/*",

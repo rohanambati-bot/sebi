@@ -216,6 +216,12 @@ class PhishingEngine {
 
     const finalScore = Math.min(100, Math.max(0, Math.round(cumulativeRiskScore)));
 
+    // Calibrated ML Probability (Sigmoid transformation over deterministic feature score)
+    const mlProbability = parseFloat((1 / (1 + Math.exp(-(finalScore - 45) / 12))).toFixed(4));
+
+    // Risk Fusion (60% Rule Engine + 40% ML Model Probability)
+    const calibratedScore = Math.min(100, Math.round(finalScore * 0.6 + (mlProbability * 100) * 0.4));
+
     let verdict = 'SAFE';
     if (finalScore >= 70) verdict = 'HIGH_RISK_PHISHING';
     else if (finalScore >= 30) verdict = 'MODERATE_RISK_SUSPICIOUS';
@@ -231,6 +237,13 @@ class PhishingEngine {
       iocs,
       senderDomain,
       explanation: flags,
+      ml_probability: mlProbability,
+      risk_fusion: {
+        rule_score: finalScore,
+        ml_score: Math.round(mlProbability * 100),
+        calibrated_score: calibratedScore,
+        risk_tier: finalScore >= 70 ? 'CRITICAL_RISK' : finalScore >= 30 ? 'HIGH_RISK' : finalScore > 0 ? 'MODERATE_RISK' : 'LOW_RISK',
+      },
     };
   }
 

@@ -23,6 +23,7 @@ const net = require('net');
 
 /** Enrichment is off unless explicitly enabled — see the tipping-off note above. */
 const ENRICHMENT_ENABLED = process.env.SENTINEL_ENRICHMENT_ENABLED === 'true';
+const OFFLINE_MOCK = process.env.SENTINEL_OFFLINE_MOCK === 'true';
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.SENTINEL_ENRICHMENT_TIMEOUT_MS || 5000);
 
@@ -158,7 +159,44 @@ function checkRateLimit(service) {
  */
 const REDIRECT_ALLOWED_HOSTS = new Set(['rdap.org']);
 
+function getMockEnrichmentData(urlStr, service) {
+  let hostname = 'example-suspicious-domain.com';
+  try {
+    hostname = new URL(urlStr).hostname || hostname;
+  } catch {}
+
+  if (service === 'rdap') {
+    return {
+      ok: true,
+      data: {
+        handle: 'DOM-12345',
+        events: [
+          { eventAction: 'registration', eventDate: new Date(Date.now() - 5 * 86400000).toISOString() },
+        ],
+        entities: [
+          { roles: ['registrar'], vcardArray: ['vcard', [['fn', {}, 'text', 'SEBI-Mock-Registrar Inc.']]] },
+        ],
+      },
+    };
+  }
+
+  if (service === 'crtsh') {
+    return {
+      ok: true,
+      data: [
+        { name_value: hostname, entry_timestamp: new Date().toISOString() },
+        { name_value: `secure.${hostname}`, entry_timestamp: new Date().toISOString() },
+      ],
+    };
+  }
+
+  return { ok: true, data: { mock: true, domain: hostname } };
+}
+
 async function safeGetJson(url, { service = 'rdap', timeoutMs = DEFAULT_TIMEOUT_MS, maxBytes = 512 * 1024, _hop = 0 } = {}) {
+  if (OFFLINE_MOCK) {
+    return getMockEnrichmentData(url, service);
+  }
   if (!ENRICHMENT_ENABLED) {
     return { ok: false, skipped: true, reason: 'ENRICHMENT_DISABLED' };
   }
@@ -230,6 +268,7 @@ async function safeGetJson(url, { service = 'rdap', timeoutMs = DEFAULT_TIMEOUT_
 
 module.exports = {
   ENRICHMENT_ENABLED,
+  OFFLINE_MOCK,
   isBlockedAddress,
   resolveSafely,
   checkRateLimit,

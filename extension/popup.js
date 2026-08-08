@@ -8,6 +8,69 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const API_BASE = 'http://127.0.0.1:8000';
 
+  const setupBox = document.getElementById('sessionSetupBox');
+  const activeBox = document.getElementById('sessionActiveBox');
+  const emailInput = document.getElementById('userEmailInput');
+  const activateBtn = document.getElementById('activateSessionBtn');
+  const displayEmail = document.getElementById('displayUserEmail');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  // Check persistent chrome.storage for verified user email
+  function loadUserSession() {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['sentinelUserEmail'], (data) => {
+        if (data && data.sentinelUserEmail) {
+          showActiveSession(data.sentinelUserEmail);
+        } else {
+          showSetupSession();
+        }
+      });
+    }
+  }
+
+  function showActiveSession(email) {
+    if (setupBox) setupBox.style.display = 'none';
+    if (activeBox) activeBox.style.display = 'block';
+    if (displayEmail) displayEmail.innerText = email;
+  }
+
+  function showSetupSession() {
+    if (setupBox) setupBox.style.display = 'block';
+    if (activeBox) activeBox.style.display = 'none';
+  }
+
+  if (activateBtn) {
+    activateBtn.addEventListener('click', () => {
+      const email = emailInput ? emailInput.value.trim() : '';
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid email address.');
+        return;
+      }
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ sentinelUserEmail: email }, () => {
+          showActiveSession(email);
+          chrome.runtime.sendMessage({ type: 'SET_USER_EMAIL', email });
+        });
+      } else {
+        showActiveSession(email);
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove(['sentinelUserEmail'], () => {
+          showSetupSession();
+        });
+      } else {
+        showSetupSession();
+      }
+    });
+  }
+
+  loadUserSession();
+
   // Live status health check
   async function checkBackendHealth() {
     try {
@@ -26,7 +89,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Query active tab risk state from background worker
+  async function updateTabShieldState() {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) return;
+
+      chrome.runtime.sendMessage({ type: 'GET_TAB_STATE', tabId: activeTab.id }, (state) => {
+        const card = document.getElementById('tabShieldCard');
+        const tierEl = document.getElementById('tabShieldTier');
+        const scoreEl = document.getElementById('tabShieldScore');
+        const descEl = document.getElementById('tabShieldDesc');
+        const sebiBadge = document.getElementById('sebiLogBadge');
+
+        if (!card || !state) return;
+
+        const isHigh = state.riskScore >= 70;
+        const isMed = state.riskScore >= 30;
+
+        if (isHigh) {
+          card.style.background = 'rgba(239, 68, 68, 0.15)';
+          card.style.borderColor = '#ef4444';
+          tierEl.innerText = '🔴 DANGER: SCAM DETECTED';
+          tierEl.style.color = '#ef4444';
+          scoreEl.innerText = `${state.riskScore}% RISK`;
+          scoreEl.style.background = '#ef4444';
+          scoreEl.style.color = '#ffffff';
+          descEl.innerText = state.flags && state.flags.length 
+            ? `Scam Flags: ${state.flags.map(f => f.type.replace(/_/g, ' ')).join(', ')}` 
+            : 'High risk scam content identified on active tab.';
+          sebiBadge.innerHTML = '🚨 <b>AUTOMATICALLY RECORDED TO SEBI EVIDENCE DB</b>';
+          sebiBadge.style.color = '#ef4444';
+        } else if (isMed) {
+          card.style.background = 'rgba(245, 158, 11, 0.15)';
+          card.style.borderColor = '#f59e0b';
+          tierEl.innerText = '🟡 SUSPICIOUS / PARTIALLY SAFE';
+          tierEl.style.color = '#f59e0b';
+          scoreEl.innerText = `${state.riskScore}% RISK`;
+          scoreEl.style.background = '#f59e0b';
+          scoreEl.style.color = '#000000';
+          descEl.innerText = state.flags && state.flags.length 
+            ? `Caution Flags: ${state.flags.map(f => f.type.replace(/_/g, ' ')).join(', ')}` 
+            : 'Suspicious indicators detected on active page.';
+          sebiBadge.innerHTML = '⚡ <b>Logged to SEBI Compliance Audit Database</b>';
+          sebiBadge.style.color = '#f59e0b';
+        } else {
+          card.style.background = 'rgba(16, 185, 129, 0.12)';
+          card.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          tierEl.innerText = '🟢 SAFE & VERIFIED CONTENT';
+          tierEl.style.color = '#10b981';
+          scoreEl.innerText = `${state.riskScore}% RISK`;
+          scoreEl.style.background = '#10b981';
+          scoreEl.style.color = '#000000';
+          descEl.innerText = 'Active tab content audited cleanly. No scam indicators detected.';
+          sebiBadge.innerHTML = '⚡ <b>Audited & Logged to SEBI Database</b>';
+          sebiBadge.style.color = '#10b981';
+        }
+      });
+    } catch (e) {}
+  }
+
   checkBackendHealth();
+  updateTabShieldState();
 
   checkBtn.addEventListener('click', async () => {
     const code = codeInput.value.trim();

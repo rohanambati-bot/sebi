@@ -1,0 +1,10 @@
+{
+  "title": "SEBI Guaranteed Returns Fraud Scheme",
+  "text": "SEBI has announced a new 400% guaranteed return program for retail investors. To participate, transfer Rs 10,000 to invest.now@oksbi within 24 hours.",
+  "extracted_iocs": [
+    { "type": "upi_vpa", "value": "invest.now@oksbi" },
+    { "type": "domain", "value": "sebi-official-tips.xyz" },
+    { "type": "phone_in", "value": "+919876543210" }
+  ],
+  "expected_contradiction": "SEBI explicitly prohibits guaranteed returns in the securities market under PFUTP Regulations 2003 and never requests funds transfers to private UPI VPAs."
+}

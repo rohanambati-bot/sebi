@@ -51,6 +51,13 @@ const TRON_RE = /\bT[1-9A-HJ-NP-Za-km-z]{33}\b/g;
 
 const IFSC_RE = /\b[A-Z]{4}0[A-Z0-9]{6}\b/g;
 
+// Enhanced SEBI / Indian Financial Fraud IOCs
+const PAN_RE = /\b[A-Z]{3}[PCHABGJLFTE][A-Z][0-9]{4}[A-Z]\b/g;
+const DEMAT_ID_RE = /\b(?:120[0-9]{13}|IN30[0-9]{14})\b/g;
+const BROKER_ID_RE = /\b[A-Z]{2}[0-9]{4,6}\b/g;
+const SOCIAL_LINK_RE = /\b(?:instagram\.com|facebook\.com|x\.com|twitter\.com)\/([a-zA-Z0-9._]{3,30})\b/gi;
+const QR_URL_RE = /\bupi:\/\/pay\?[^\s"']+\b/gi;
+
 /** Luhn-style structural sanity check is not applicable to UPI; validate via handle allowlist only (already enforced by UPI_RE). */
 
 /**
@@ -116,14 +123,13 @@ class IocExtractor {
     pushAll(ETH_RE, 'wallet_eth', (m) => (isPlausibleEthAddress(m[0]) ? m[0] : null));
     pushAll(TRON_RE, 'wallet_tron', (m) => m[0]);
     pushAll(BTC_BECH32_RE, 'wallet_btc', (m) => (isPlausibleBech32(m[0]) ? m[0].toLowerCase() : null));
-    pushAll(BTC_LEGACY_RE, 'wallet_btc', (m) => {
-      // Base58 legacy addresses collide syntactically with other base58 tokens
-      // (e.g. some API keys). Require a plausible length band already encoded
-      // in the regex; full base58check validation would need a base58 decoder,
-      // which is a reasonable Phase 3+ addition if false positives show up in
-      // practice.
-      return m[0];
-    });
+    pushAll(BTC_LEGACY_RE, 'wallet_btc', (m) => m[0]);
+
+    // Enhanced SEBI / Regulatory IOCs
+    pushAll(PAN_RE, 'pan', (m) => m[0].toUpperCase());
+    pushAll(DEMAT_ID_RE, 'demat_id', (m) => m[0]);
+    pushAll(SOCIAL_LINK_RE, 'social_handle', (m) => m[0]);
+    pushAll(QR_URL_RE, 'qr_url', (m) => m[0]);
 
     // Bank account + IFSC pairing: only emit an account-like number when an
     // IFSC code also appears within 60 chars, otherwise a bare 9-18 digit

@@ -106,10 +106,92 @@
     });
   }
 
+  // Webmail (Gmail / Outlook) Automatic Email Body Scanner
+  async function scanWebmailEmails() {
+    const emailBodies = document.querySelectorAll('.a3s.aiL, [data-message-id], .ItemBody, .message-in, .message-out');
+    emailBodies.forEach(async (bodyEl) => {
+      if (bodyEl.dataset.sentinelEmailScanned) return;
+      bodyEl.dataset.sentinelEmailScanned = 'true';
+
+      const emailText = bodyEl.innerText;
+      if (!emailText || emailText.length < 15) return;
+
+      try {
+        const res = await fetch('http://127.0.0.1:8000/phishing/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: emailText, channel: location.host.includes('google') ? 'email' : 'chat' })
+        });
+        const data = await res.json();
+        
+        // Notify Background Service Worker to update Chrome Extension Badge (Green, Yellow, Red)
+        try {
+          chrome.runtime.sendMessage({
+            type: 'ANALYSIS_RESULT',
+            analysis: data,
+            url: window.location.href,
+            title: document.title,
+            channel: location.host.includes('google') ? 'email' : 'chat'
+          });
+        } catch (e) {}
+
+        // Inject Sentinel Security Banner on top of the email/chat
+        const banner = document.createElement('div');
+        const isHigh = data.risk_score >= 70;
+        const isMed = data.risk_score >= 30;
+        const color = isHigh ? '#ef4444' : isMed ? '#f59e0b' : '#10b981';
+        const bg = isHigh ? 'rgba(239, 68, 68, 0.12)' : isMed ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)';
+        
+        banner.style.cssText = `background: ${bg}; border: 1.5px solid ${color}; color: #ffffff; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-family: system-ui, sans-serif; font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15);`;
+        banner.innerHTML = `
+          <div>
+            <span style="font-weight: 800; color: ${color}; font-family: monospace;">🛡️ SENTINEL SEBI SHIELD</span> &nbsp;|&nbsp; 
+            Verdict: <b style="color:${color}">${data.verdict || 'SAFE'} RISK</b> (Score: ${data.risk_score}/100)
+            <div style="font-size: 11.5px; opacity: 0.85; margin-top: 3px;">
+              ${data.flags && data.flags.length ? data.flags.map(f => f.type.replace(/_/g,' ')).join(', ') : 'No malicious flags detected.'}
+              ${isHigh ? '<b style="color:#ef4444;"> • Automatically Reported to SEBI Ledger DB</b>' : ''}
+            </div>
+          </div>
+          <span style="background:${color}; color:#000; font-size:10px; font-weight:bold; padding:3px 8px; border-radius:4px; font-family:monospace;">${data.risk_score}% RISK</span>
+        `;
+        bodyEl.insertBefore(banner, bodyEl.firstChild);
+      } catch (e) {
+        console.warn('[Sentinel] Webmail scan backend query failed:', e);
+      }
+    });
+  }
+
+  // Scan overall active page text for tab badge state
+  async function scanActivePage() {
+    const pageText = document.body ? document.body.innerText.slice(0, 3000) : '';
+    if (!pageText || pageText.length < 30) return;
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/phishing/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: pageText, channel: 'web' })
+      });
+      const data = await res.json();
+      
+      try {
+        chrome.runtime.sendMessage({
+          type: 'ANALYSIS_RESULT',
+          analysis: data,
+          url: window.location.href,
+          title: document.title,
+          channel: 'web'
+        });
+      } catch (e) {}
+    } catch (e) {}
+  }
+
   // Initial Scan
   setTimeout(() => {
     auditLinks();
     scanDOMForVPA();
+    scanWebmailEmails();
+    scanActivePage();
   }, 500);
 
   // Dynamic DOM Mutation Observer
@@ -119,6 +201,7 @@
         if (node.nodeType === Node.ELEMENT_NODE) {
           auditLinks(node);
           scanDOMForVPA(node);
+          scanWebmailEmails();
         }
       }
     }

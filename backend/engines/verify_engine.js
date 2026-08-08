@@ -13,6 +13,24 @@ class VerifyEngine {
   constructor() {
     this.registeredMessages = [];
     this.seedDemoData();
+    this.loadFromDatabase();
+  }
+
+  loadFromDatabase() {
+    try {
+      const DBSqlite = require('../db_sqlite');
+      DBSqlite.getAllRegisteredComms((err, rows) => {
+        if (!err && Array.isArray(rows) && rows.length > 0) {
+          for (const row of rows) {
+            if (!this.registeredMessages.some(m => m.code === row.code)) {
+              this.registeredMessages.push(row);
+            }
+          }
+        }
+      });
+    } catch {
+      // Ignored if DB is not available in unit test context
+    }
   }
 
   seedDemoData() {

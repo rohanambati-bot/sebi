@@ -34,6 +34,18 @@ async function runTextScan() {
     verdEl.innerText = `${data.verdict} RISK`;
     
     headerBar.className = `verdict-header verd-${data.verdict.toLowerCase()}`;
+    resBox.className = `result-box ${data.risk_score >= 70 ? 'glow-high' : data.risk_score >= 30 ? 'glow-medium' : ''}`;
+
+    // Render Risk Fusion & ML Model Breakdown if available
+    const fusionWidget = document.getElementById('risk-fusion-widget');
+    if (data.risk_fusion && fusionWidget) {
+      fusionWidget.style.display = 'block';
+      document.getElementById('fusion-rule-score').innerText = `${data.risk_fusion.rule_score}/100`;
+      document.getElementById('fusion-ml-score').innerText = `${data.risk_fusion.ml_score}%`;
+      document.getElementById('fusion-calibrated-score').innerText = `${data.risk_fusion.calibrated_score}/100`;
+      const tierEl = document.getElementById('fusion-risk-tier');
+      tierEl.innerText = data.risk_fusion.risk_tier || data.verdict;
+    }
     
     if(data.flags.length === 0) {
       logBox.innerHTML = '<div class="flag-item">No malicious signatures detected in this text.</div>';
@@ -45,8 +57,9 @@ async function runTextScan() {
         } else {
           detailStr = escapeHtml(f.detail);
         }
+        const tagClass = getIocTagClass(f.type);
         return `<div class="flag-item">
-          <span class="flag-tag">${escapeHtml(f.type.replace(/_/g, ' '))} · ${escapeHtml(f.severity)}</span>
+          <span class="${tagClass}">${escapeHtml(f.type.replace(/_/g, ' '))} · ${escapeHtml(f.severity)}</span>
           <p>${detailStr}</p>
         </div>`;
       }).join('');
@@ -55,6 +68,17 @@ async function runTextScan() {
   } catch (e) {
     logBox.innerHTML = `<p style="color:var(--high);">Error connecting to scanner API.</p>`;
   }
+}
+
+function getIocTagClass(type) {
+  if (!type) return 'flag-tag';
+  const t = type.toLowerCase();
+  if (t.includes('pan')) return 'flag-tag tag-pan';
+  if (t.includes('demat')) return 'flag-tag tag-demat';
+  if (t.includes('upi') || t.includes('qr')) return 'flag-tag tag-upi';
+  if (t.includes('broker')) return 'flag-tag tag-broker';
+  if (t.includes('social') || t.includes('telegram') || t.includes('whatsapp')) return 'flag-tag tag-social';
+  return 'flag-tag';
 }
 
 // EML Scan

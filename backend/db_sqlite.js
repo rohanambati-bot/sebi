@@ -146,7 +146,10 @@ db.serialize(() => {
       code TEXT PRIMARY KEY,
       issuer_id TEXT NOT NULL,
       issuer_name TEXT NOT NULL,
+      content TEXT,
       content_hash TEXT NOT NULL,
+      signature TEXT,
+      public_key_pem TEXT,
       created_at TEXT NOT NULL,
       user_id INTEGER REFERENCES users(id)
     )
@@ -213,7 +216,8 @@ db.serialize(() => {
       source_ip TEXT,
       created_at TEXT NOT NULL,
       prev_hash TEXT NOT NULL,
-      entry_hash TEXT NOT NULL
+      entry_hash TEXT NOT NULL,
+      is_demo INTEGER NOT NULL DEFAULT 0
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_evidence_sha256 ON evidence_artifacts(sha256)`);
@@ -283,7 +287,8 @@ db.serialize(() => {
       first_seen TEXT,
       last_seen TEXT,
       status TEXT NOT NULL DEFAULT 'ACTIVE',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      is_demo INTEGER NOT NULL DEFAULT 0
     )
   `);
   db.run(`
@@ -591,6 +596,11 @@ const migrationsReady = (async () => {
   await ensureColumn('scans', 'evidence_sha256', 'TEXT');
   await ensureColumn('takedowns', 'user_id', 'INTEGER REFERENCES users(id)');
   await ensureColumn('registered_communications', 'user_id', 'INTEGER REFERENCES users(id)');
+  await ensureColumn('registered_communications', 'content', 'TEXT');
+  await ensureColumn('registered_communications', 'signature', 'TEXT');
+  await ensureColumn('registered_communications', 'public_key_pem', 'TEXT');
+  await ensureColumn('campaigns', 'is_demo', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn('evidence_artifacts', 'is_demo', 'INTEGER NOT NULL DEFAULT 0');
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_scans_user ON scans(user_id)`, (err) => {
     if (err) console.error(`[db] index idx_scans_user failed: ${err.message}`);
@@ -902,6 +912,66 @@ class DBSqlite {
         entriesChecked: (rows || []).length,
         headHash: expectedPrev === Evidence.GENESIS_HASH ? null : expectedPrev,
       });
+    });
+  }
+
+  static addRegisteredComm({ code, issuerId, issuerName, content, contentHash, signature, publicKeyPem, createdAt, user_id }, callback) {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO registered_communications 
+        (code, issuer_id, issuer_name, content, content_hash, signature, public_key_pem, created_at, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      [
+        code,
+        issuerId || 'SEBI-REGISTERED-ISSUER',
+        issuerName || 'Registered Market Intermediary',
+        content || '',
+        contentHash || '',
+        signature || '',
+        publicKeyPem || '',
+        createdAt || new Date().toISOString(),
+        user_id || null,
+      ],
+      function (err) {
+        if (err && callback) return callback(err);
+        if (callback) callback(null, { code });
+      }
+    );
+  }
+
+  static getRegisteredCommByCode(code, callback) {
+    db.get(`SELECT * FROM registered_communications WHERE code = ?`, [code], (err, row) => {
+      if (err || !row) return callback(err, null);
+      callback(null, {
+        code: row.code,
+        issuerId: row.issuer_id,
+        issuerName: row.issuer_name,
+        content: row.content,
+        contentHash: row.content_hash,
+        signature: row.signature,
+        publicKeyPem: row.public_key_pem,
+        createdAt: row.created_at,
+        userId: row.user_id,
+      });
+    });
+  }
+
+  static getAllRegisteredComms(callback) {
+    db.all(`SELECT * FROM registered_communications ORDER BY created_at DESC`, [], (err, rows) => {
+      if (err || !rows) return callback(err, []);
+      const records = rows.map((row) => ({
+        code: row.code,
+        issuerId: row.issuer_id,
+        issuerName: row.issuer_name,
+        content: row.content,
+        contentHash: row.content_hash,
+        signature: row.signature,
+        publicKeyPem: row.public_key_pem,
+        createdAt: row.created_at,
+        userId: row.user_id,
+      }));
+      callback(null, records);
     });
   }
 

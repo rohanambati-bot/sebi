@@ -14,7 +14,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8000
-      - JWT_SECRET=${JWT_SECRET:-production_default_sebi_sentinel_jwt_secret_must_be_32_chars_long_minimum}
+      - JWT_SECRET=${JWT_SECRET}
+      - SENTINEL_DB_PATH=/app/backend/data/sentinel.db
     restart: unless-stopped
 
 volumes:

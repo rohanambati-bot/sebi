@@ -296,6 +296,57 @@ async function generateCertInTakedown() {
   }
 }
 
+// 1-Click SEBI SCORES Regulatory Formal Complaint Generator
+async function generateSebiScoresComplaint() {
+  const targetDomain = document.getElementById('takedown-domain-input').value;
+  const scamVpa = document.getElementById('takedown-vpa-input').value;
+  const targetPhone = document.getElementById('takedown-phone-input').value;
+  const threatCategory = document.getElementById('takedown-category-select').value;
+
+  if (!selectedCampaignId && !targetDomain && !scamVpa && !targetPhone) {
+    showToast("Enter a Domain, UPI VPA, or Phone/Telegram channel to generate SEBI SCORES Complaint.");
+    return;
+  }
+
+  if (!(await ensureAdmin())) return;
+
+  try {
+    const timestamp = new Date().toISOString();
+    const ref = `SEBI-SCORES-${Date.now().toString(36).toUpperCase()}`;
+    const legalNoticeText = [
+      '================================================================================',
+      '               SEBI SCORES FORMAL COMPLAINT & REGULATORY NOTICE                ',
+      `Ref No: ${ref}`,
+      `Date: ${timestamp}`,
+      'Regulation: SEBI (PFUTP) Regulations 2003 & Circular SEBI/HO/MIRSD/DOS3/CIR/P/2019/30',
+      '================================================================================',
+      '',
+      '1. ENTITY & VIOLATION DETAILS',
+      `   Alleged Impersonated Intermediary: Securities Market Intermediary / SEBI Official`,
+      `   Fraudulent Web Domain: ${targetDomain || 'N/A'}`,
+      `   Illegal Payment Rail / UPI VPA: ${scamVpa || 'N/A'}`,
+      `   Scam Contact / Channel: ${targetPhone || 'N/A'}`,
+      `   Violation Category: ${threatCategory || 'Unregistered Stock Advice & Impersonation Fraud'}`,
+      '',
+      '2. APPLICABLE STATUTORY CLAUSES',
+      '   - SEBI (PFUTP) Regulation 3: Prohibition of Buying, Selling or Dealing in Securities in Fraudulent Manner',
+      '   - SEBI (PFUTP) Regulation 4: Prohibition of Manipulative, Fraudulent and Deceptive Devices',
+      '',
+      '3. ENFORCEMENT DIRECTIVES REQUESTED',
+      '   - Request NIXI / .IN Registry to revoke infringing domain name',
+      '   - Request Financial Intelligence Unit (FIU-IND) for immediate bank account freeze',
+      '   - Dispath formal warning to public on SEBI SCORES portal',
+      '================================================================================',
+    ].join('\n');
+
+    document.getElementById('takedown-notice-container').style.display = 'block';
+    document.getElementById('takedown-notice-text').innerText = legalNoticeText;
+    showToast("SEBI SCORES Formal Legal Complaint Notice generated successfully!");
+  } catch(e) {
+    showToast("Failed to generate SEBI SCORES complaint.");
+  }
+}
+
 // SEBI admin reads Incident & Takedown logs
 async function loadReports() {
   try {

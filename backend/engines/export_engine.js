@@ -319,6 +319,77 @@ class ExportEngine {
       ],
     };
   }
+
+  /**
+   * Pre-formatted CERT-In Incident Report (Sec 70B IT Act 2000 compliant format).
+   */
+  static generateCertInReport({ incidentId, domain, scamVpa, targetPhone, threatCategory, summary, iocs = [] }) {
+    const timestamp = new Date().toISOString();
+    const id = incidentId || `CERT-IN-${Date.now()}`;
+    const iocLines = iocs.length > 0
+      ? iocs.map(i => `   - [${i.type.toUpperCase()}] ${i.value}`).join('\n')
+      : `   - [DOMAIN] ${domain || 'N/A'}\n   - [UPI_VPA] ${scamVpa || 'N/A'}\n   - [PHONE] ${targetPhone || 'N/A'}`;
+
+    return [
+      '================================================================================',
+      'CERT-In MANDATORY CYBER INCIDENT REPORT (Under Sec 70B IT Act 2000)',
+      `Incident ID: ${id}`,
+      `Report Generated: ${timestamp}`,
+      `Threat Category: ${threatCategory || 'Securities Market Impersonation & Financial Fraud'}`,
+      '================================================================================',
+      '',
+      '1. INCIDENT OVERVIEW',
+      `   Target Domain / Host: ${domain || 'N/A'}`,
+      `   Associated Payment Rail: ${scamVpa || 'N/A'}`,
+      `   Associated Contact Phone: ${targetPhone || 'N/A'}`,
+      `   Summary: ${summary || 'Unsolicited securities market fraud campaign detected by SentinelSEBI.'}`,
+      '',
+      '2. EXTRACTED INDICATORS OF COMPROMISE (IOCs)',
+      iocLines,
+      '',
+      '3. MITRE ATT&CK MAPPING',
+      '   - T1583.001 (Acquire Infrastructure: Domains)',
+      '   - T1656 (Impersonation)',
+      '   - T1657 (Financial Theft)',
+      '',
+      '4. MANDATORY REGULATORY ACTION REQUESTED',
+      '   - DoT (Department of Telecommunications): Domain DNS Blocking & Takedown',
+      '   - NPCI (National Payments Corporation of India): Freeze on linked UPI VPA',
+      '================================================================================',
+    ].join('\n');
+  }
+
+  /**
+   * Pre-formatted SEBI SCORES Regulatory Complaint Notice.
+   */
+  static generateSebiScoresNotice({ noticeId, domain, scamVpa, intermediaryName, violationDetails }) {
+    const timestamp = new Date().toISOString();
+    const ref = noticeId || `SEBI-SCORES-${Date.now()}`;
+
+    return [
+      '================================================================================',
+      'SEBI SCORES FORMAL COMPLAINT & REGULATORY NOTICE',
+      `Ref No: ${ref}`,
+      `Date: ${timestamp}`,
+      'Regulation: SEBI (PFUTP) Regulations 2003 & Circular SEBI/HO/MIRSD/DOS3/CIR/P/2019/30',
+      '================================================================================',
+      '',
+      '1. ENTITY & VIOLATION DETAILS',
+      `   Alleged Impersonated Intermediary: ${intermediaryName || 'Securities Market Intermediary / SEBI Official'}`,
+      `   Fraudulent Web Domain: ${domain || 'N/A'}`,
+      `   Illegal Payment Rail: ${scamVpa || 'N/A'}`,
+      `   Violation Details: ${violationDetails || 'Promising illegal guaranteed returns and operating unverified stock tip groups.'}`,
+      '',
+      '2. APPLICABLE STATUTORY CLAUSES',
+      '   - SEBI (PFUTP) Regulation 3: Prohibition of Buying, Selling or Dealing in Securities in Fraudulent Manner',
+      '   - SEBI (PFUTP) Regulation 4: Prohibition of Manipulative, Fraudulent and Deceptive Devices',
+      '',
+      '3. ENFORCEMENT DIRECTIVE',
+      '   - Request NIXI / .IN Registry to revoke infringing domain name',
+      '   - Request Financial Intelligence Unit (FIU-IND) for bank account freeze',
+      '================================================================================',
+    ].join('\n');
+  }
 }
 
 module.exports = { ExportEngine, stixId, stixPatternFor, ATTACK_TECHNIQUES };

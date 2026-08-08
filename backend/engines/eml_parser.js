@@ -289,6 +289,7 @@ class EMLParser {
         isSmimeEncrypted,
         isPgpEncrypted,
         extractedPassword,
+        credentialArtifactDetected: Boolean(extractedPassword),
         securityActionNeeded: isEncryptedPayload ? 'FLAGGED_UNSCANNABLE_ENCRYPTED_PAYLOAD' : 'NONE',
       },
       bodyText: `${decodedSubject}\n\n${decodedBody}`,

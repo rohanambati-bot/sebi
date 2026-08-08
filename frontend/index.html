@@ -23,6 +23,9 @@
     --gold: #d97706; /* amber accent */
     --gold-light: #f59e0b;
     --gold-dim: #92400e;
+    --cyan: #06b6d4;
+    --cyan-light: #38bdf8;
+    --blue-accent: #0284c7;
     --text-primary: #f3f4f6;
     --text-secondary: #9ca3af;
     --text-muted: #6b7280;
@@ -32,6 +35,12 @@
     --high: #ef4444;
     --critical: #8b5cf6;
     
+    /* Financial IOC Badge Palette */
+    --ioc-pan: #6366f1;
+    --ioc-demat: #14b8a6;
+    --ioc-upi: #34d399;
+    --ioc-social: #ec4899;
+
     --font-sans: 'Inter', sans-serif;
     --font-serif: 'Playfair Display', serif;
     --font-mono: 'JetBrains Mono', monospace;
@@ -550,10 +559,23 @@
     font-size: 10px;
     text-transform: uppercase;
     color: var(--gold-light);
-    display: block;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
     margin-bottom: 4px;
     font-weight: 600;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
   }
+  .tag-pan { color: #a5b4fc; background: rgba(99, 102, 241, 0.15); border-color: rgba(99, 102, 241, 0.4); }
+  .tag-demat { color: #5eead4; background: rgba(20, 184, 166, 0.15); border-color: rgba(20, 184, 166, 0.4); }
+  .tag-upi { color: #6ee7b7; background: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.4); }
+  .tag-broker { color: #7dd3fc; background: rgba(6, 182, 212, 0.15); border-color: rgba(6, 182, 212, 0.4); }
+  .tag-social { color: #f472b6; background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.4); }
+
+  .glow-high { box-shadow: 0 0 18px rgba(239, 68, 68, 0.35); border-color: rgba(239, 68, 68, 0.6) !important; }
+  .glow-critical { box-shadow: 0 0 24px rgba(139, 92, 246, 0.45); border-color: rgba(139, 92, 246, 0.6) !important; }
+  .glow-medium { box-shadow: 0 0 14px rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.5) !important; }
 
   /* Forensics side-by-side (Image analysis) */
   .preview-grid {
@@ -1083,6 +1105,28 @@
             <div class="verdict-text" id="result-verdict">LOW RISK</div>
           </div>
         </div>
+
+        <!-- Hybrid Risk Fusion & ML Calibration Widget -->
+        <div id="risk-fusion-widget" style="display:none; background:rgba(6, 182, 212, 0.07); border:1px solid var(--border-color); border-radius:6px; padding:14px; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--cyan-light); font-weight:600;">⚡ Hybrid Risk Fusion Engine</span>
+            <span id="fusion-risk-tier" style="font-family:var(--font-mono); font-size:10px; padding:2px 8px; border-radius:4px; font-weight:700; background:rgba(239, 68, 68, 0.2); color:var(--high);">HIGH_RISK</span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; font-size:12px;">
+            <div style="background:rgba(10, 15, 30, 0.6); padding:8px 10px; border-radius:4px; border:1px solid var(--border-color);">
+              <div style="color:var(--text-muted); font-size:10px; font-family:var(--font-mono);">RULE ENGINE (60%)</div>
+              <div id="fusion-rule-score" style="font-weight:700; color:var(--text-primary); font-size:16px;">--</div>
+            </div>
+            <div style="background:rgba(10, 15, 30, 0.6); padding:8px 10px; border-radius:4px; border:1px solid var(--border-color);">
+              <div style="color:var(--text-muted); font-size:10px; font-family:var(--font-mono);">ML MODEL PROB (40%)</div>
+              <div id="fusion-ml-score" style="font-weight:700; color:var(--cyan-light); font-size:16px;">--</div>
+            </div>
+            <div style="background:rgba(10, 15, 30, 0.6); padding:8px 10px; border-radius:4px; border:1px solid var(--cyan);">
+              <div style="color:var(--cyan-light); font-size:10px; font-family:var(--font-mono);">FUSED CALIBRATED</div>
+              <div id="fusion-calibrated-score" style="font-weight:700; color:var(--gold-light); font-size:16px;">--</div>
+            </div>
+          </div>
+        </div>
         
         <div class="evidence-title">Detection Explanations &amp; Evidence Log</div>
         <div id="evidence-log-container">
@@ -1307,7 +1351,10 @@
             </select>
           </div>
         </div>
-        <button class="action-btn" style="margin-top:14px;" onclick="generateCertInTakedown()">Dispatch Legal Takedown Directives (CERT-In / DoT / NPCI)</button>
+        <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;">
+          <button class="action-btn" onclick="generateCertInTakedown()">Dispatch Legal Takedown Directives (CERT-In / DoT / NPCI)</button>
+          <button class="action-btn" style="background:linear-gradient(135deg, var(--cyan), var(--blue-accent));" onclick="generateSebiScoresComplaint()">Generate SEBI SCORES Formal Complaint Notice</button>
+        </div>
       </div>
 
       <!-- Legal Notice Display Modal/Box -->
