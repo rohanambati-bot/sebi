@@ -14,7 +14,7 @@ function escapeHtml(text) {
 
 // App Config
 const CONFIG = {
-  apiEndpoint: 'http://127.0.0.1:8000',
+  apiEndpoint: (window.location.origin && window.location.origin.startsWith('http')) ? window.location.origin : 'http://127.0.0.1:8000',
   currentTab: 'dashboard',
   currentRole: 'investor',
   username: 'investor'
