@@ -79,6 +79,31 @@
       
       <!-- 1. DASHBOARD PANEL -->
       <section id="panel-dashboard" class="tab-panel active">
+        <!-- Extension Recommendation Shield Banner -->
+        <div class="glass-panel extension-banner-card" id="extension-banner">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+            <div style="display:flex; align-items:center; gap:16px; min-width:280px; flex:1;">
+              <div class="extension-icon-box">🛡️</div>
+              <div>
+                <div style="font-family:var(--font-heading); font-size:16px; font-weight:800; color:#fff; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <span>Get Real-Time Protection with SentinelSEBI Extension Shield</span>
+                  <span class="badge-tag badge-safe" style="font-size:10px; padding:2px 8px;">FREE SHIELD</span>
+                </div>
+                <p style="font-size:12px; color:var(--text-muted); margin-top:3px;">
+                  Automatically detects scam emails in Gmail &amp; Webmail, flags fake IPO tips in WhatsApp/Telegram, and highlights typosquatting links in real-time.
+                </p>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px;">
+              <button class="btn-primary" style="padding:10px 18px; font-size:13px;" onclick="openExtensionGuide()">
+                <span>⚡ Add Extension Shield</span>
+              </button>
+              <button class="btn-secondary" style="padding:10px 14px; font-size:12px;" onclick="dismissExtensionBanner()">Dismiss</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Metric Cards -->
         <div class="metrics-grid">
           <div class="glass-panel metric-card">
@@ -280,6 +305,52 @@
 
     </div>
   </main>
+</div>
+
+<!-- Extension Guide Modal -->
+<div class="modal-backdrop" id="extension-modal">
+  <div class="modal-glass">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <div style="font-family:var(--font-heading); font-size:20px; font-weight:800; color:#fff; display:flex; align-items:center; gap:10px;">
+        <span>🛡️ Install SentinelSEBI Extension Shield</span>
+      </div>
+      <button onclick="closeExtensionGuide()" style="background:none; border:none; color:var(--text-muted); font-size:24px; cursor:pointer;">&times;</button>
+    </div>
+
+    <p style="color:var(--text-muted); font-size:13px; margin-bottom:20px;">
+      Enjoy free 24/7 background protection across Gmail, Webmail, WhatsApp Web, Telegram, and stock broker portals.
+    </p>
+
+    <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:28px; height:28px; background:var(--neon-amber-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">1</div>
+        <div>
+          <b style="color:#fff; font-size:13.5px;">Open Chrome Extension Manager</b>
+          <p style="font-size:12px; color:var(--text-muted);">Navigate to <code style="color:var(--neon-amber);">chrome://extensions</code> in your browser and enable <b>Developer mode</b> (top right toggle).</p>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:28px; height:28px; background:var(--neon-amber-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">2</div>
+        <div>
+          <b style="color:#fff; font-size:13.5px;">Load Unpacked Extension Folder</b>
+          <p style="font-size:12px; color:var(--text-muted);">Click <b>Load unpacked</b> and select the <code style="color:var(--neon-cyan);">sebi/extension</code> directory from this project.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:28px; height:28px; background:var(--neon-emerald-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">3</div>
+        <div>
+          <b style="color:#fff; font-size:13.5px;">Active Background Protection Enabled</b>
+          <p style="font-size:12px; color:var(--text-muted);">The shield icon will appear in your Chrome toolbar, automatically flagging scam emails and fake stock tips!</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn-primary" onclick="closeExtensionGuide()">Got It — Enable Shield</button>
+    </div>
+  </div>
 </div>
 
 <div id="system-toast"></div>

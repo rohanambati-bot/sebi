@@ -471,3 +471,27 @@ async function clearDatabase() {
     showToast("Failed to connect to backend server for database clear.");
   }
 }
+
+function openExtensionGuide() {
+  const modal = document.getElementById('extension-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeExtensionGuide() {
+  const modal = document.getElementById('extension-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function dismissExtensionBanner() {
+  const banner = document.getElementById('extension-banner');
+  if (banner) banner.style.display = 'none';
+  sessionStorage.setItem('extension_banner_dismissed', 'true');
+}
+
+// Auto check banner dismissal state on load
+window.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('extension_banner_dismissed') === 'true') {
+    const banner = document.getElementById('extension-banner');
+    if (banner) banner.style.display = 'none';
+  }
+});
