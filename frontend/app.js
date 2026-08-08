@@ -486,15 +486,12 @@ function closeExtensionGuide() {
 function dismissExtensionBanner() {
   const banner = document.getElementById('extension-banner');
   if (banner) banner.style.display = 'none';
-  sessionStorage.setItem('extension_banner_dismissed', 'true');
 }
 
-// Auto check banner dismissal state and load ML status on load
+// Ensure extension banner is ALWAYS shown on page refresh & load ML status
 window.addEventListener('DOMContentLoaded', () => {
-  if (sessionStorage.getItem('extension_banner_dismissed') === 'true') {
-    const banner = document.getElementById('extension-banner');
-    if (banner) banner.style.display = 'none';
-  }
+  const banner = document.getElementById('extension-banner');
+  if (banner) banner.style.display = 'block';
   loadMlStatus();
 });
 
