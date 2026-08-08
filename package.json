@@ -1,0 +1,13 @@
+{
+  "name": "sentinel-sebi-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend dev",
+    "test": "npm --prefix backend test",
+    "train:all": "npm --prefix backend run train:all",
+    "benchmark:ml": "npm --prefix backend run benchmark:ml",
+    "validate:ml-data": "npm --prefix backend run validate:ml-data"
+  }
+}
