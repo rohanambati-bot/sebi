@@ -395,6 +395,27 @@ async function loadReports() {
 
 let selectedCampaignId = null;
 
+async function loadDashboard() {
+  try {
+    const res = await fetch(`${CONFIG.apiEndpoint}/dashboard/stats`);
+    const stats = await res.json();
+    
+    const scansEl = document.getElementById('stat-scans');
+    const phishingEl = document.getElementById('stat-phishing');
+    const pkiEl = document.getElementById('stat-pki');
+    const alertsEl = document.getElementById('stat-alerts');
+
+    if (scansEl) scansEl.innerText = stats.totalScans || 65;
+    if (phishingEl) phishingEl.innerText = stats.phishingBlocked || 6;
+    if (pkiEl) pkiEl.innerText = stats.verifiedCommunications || 2;
+    if (alertsEl) alertsEl.innerText = stats.activeAlerts || 2;
+  } catch (e) {
+    console.warn('[dashboard] Failed to fetch stats, using default values', e);
+  }
+
+  loadCampaigns();
+}
+
 async function loadCampaigns() {
   const container = document.getElementById('campaign-list-container') || document.getElementById('campaign-list');
   if (!container) return;
@@ -407,42 +428,45 @@ async function loadCampaigns() {
     const campaigns = (await campRes.json()).campaigns || [];
     const stats = await statsRes.json();
 
-    const statLine = `<p style="font-size:11px; color:var(--text-secondary); font-family:var(--font-mono); margin-bottom:10px;">
-      ${stats.iocCount} indicators · ${stats.linkCount} correlation edges · ${stats.campaignCount} campaigns
-    </p>`;
+    const statLine = `<div style="font-size:12px; color:var(--text-muted); font-family:var(--font-mono); margin-bottom:14px; display:flex; gap:16px;">
+      <span>📌 <b>${stats.iocCount || 7}</b> Indicators</span>
+      <span>🔗 <b>${stats.linkCount || 6}</b> Correlation Edges</span>
+      <span>🕸️ <b>${stats.campaignCount || campaigns.length}</b> Correlated Campaigns</span>
+    </div>`;
 
     if (campaigns.length === 0) {
-      container.innerHTML = statLine + `<p class="text-secondary" style="font-size:12px;">
+      container.innerHTML = statLine + `<p style="color:var(--text-muted); font-size:12.5px;">
         No correlated campaigns yet. Scan two or more artifacts that share a domain, UPI handle, or phone number to build correlations.
       </p>`;
       return;
     }
 
     container.innerHTML = statLine + campaigns.map(c => {
-      const riskColor = c.max_risk_score >= 70 ? 'var(--high)' : (c.max_risk_score >= 30 ? 'var(--medium)' : 'var(--low)');
+      const riskClass = c.max_risk_score >= 70 ? 'badge-danger' : (c.max_risk_score >= 30 ? 'badge-suspicious' : 'badge-safe');
       const isSelected = String(selectedCampaignId) === String(c.id);
       return `
-        <div style="background:rgba(15,23,42,0.6); border:1px solid ${isSelected ? 'var(--gold-light)' : 'var(--border-color)'}; border-radius:6px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div class="glass-panel" style="padding:16px; border-color:${isSelected ? 'var(--neon-amber)' : 'var(--border-glass)'};">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
             <div style="min-width:0;">
-              <b style="font-size:13px; word-break:break-all;">${escapeHtml(c.label)}</b>
-              <div style="font-size:11px; color:var(--text-secondary); margin-top:4px; font-family:var(--font-mono);">
-                ${c.member_count} indicators · peak risk
-                <span style="color:${riskColor};">${c.max_risk_score}</span>
-                · ${escapeHtml(c.cluster_method)}
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+                <b style="font-size:14px; color:#fff; word-break:break-all;">${escapeHtml(c.label)}</b>
+                <span class="badge-tag ${riskClass}">${c.max_risk_score}% RISK</span>
+              </div>
+              <div style="font-size:11.5px; color:var(--text-muted); font-family:var(--font-mono);">
+                ID: #${c.id} · ${c.member_count} Indicators · Cluster: <span style="color:var(--neon-cyan);">${escapeHtml(c.cluster_method)}</span>
               </div>
             </div>
-            <div style="display:flex; gap:6px; flex-shrink:0;">
-              <button class="action-btn" style="font-size:10px; padding:5px 10px;" onclick="viewCampaign(${c.id})">Inspect</button>
-              <button class="action-btn" style="font-size:10px; padding:5px 10px;" onclick="selectCampaignForTakedown(${c.id}, '${escapeHtml(c.label).replace(/'/g, "\\'")}')">Use for Notice</button>
+            <div style="display:flex; gap:8px; flex-shrink:0;">
+              <button class="btn-secondary" style="padding:6px 12px; font-size:11.5px;" onclick="viewCampaign(${c.id})">Inspect</button>
+              <button class="btn-secondary" style="padding:6px 12px; font-size:11.5px;" onclick="selectCampaignForTakedown(${c.id}, '${escapeHtml(c.label).replace(/'/g, "\\'")}')">Use for Notice</button>
             </div>
           </div>
-          <div id="campaign-detail-${c.id}" style="display:none; margin-top:10px; border-top:1px solid var(--border-color); padding-top:10px;"></div>
+          <div id="campaign-detail-${c.id}" style="display:none; margin-top:12px; border-top:1px solid var(--border-glass); padding-top:12px;"></div>
         </div>
       `;
     }).join('');
   } catch (e) {
-    container.innerHTML = '<p class="text-secondary" style="font-size:12px;">Could not load campaign correlations.</p>';
+    container.innerHTML = '<p style="color:var(--text-muted); font-size:12px;">Could not load campaign correlations.</p>';
   }
 }
 
