@@ -269,28 +269,42 @@ function switchScanChannel(chan) {
     }
   });
 
-  const textCont = document.getElementById('scan-input-text-container');
-  const fileCont = document.getElementById('scan-input-file-container');
-
-  if (chan === 'text') {
-    textCont.style.display = 'block';
-    fileCont.style.display = 'none';
-  } else {
-    textCont.style.display = 'none';
-    fileCont.style.display = 'block';
-    const label = document.getElementById('file-drop-label');
-    if (chan === 'eml') label.innerText = 'Click or Drag & Drop EML Email File';
-    else if (chan === 'image') label.innerText = 'Click or Drag & Drop Screenshot / Image (QR Code quishing support)';
-    else if (chan === 'audio') label.innerText = 'Click or Drag & Drop Audio File (MP3/WAV deepfake check)';
-    else if (chan === 'video') label.innerText = 'Click or Drag & Drop Video File (MP4/AVI forensics)';
-  }
+  const containers = ['text', 'eml', 'image', 'audio', 'video'];
+  containers.forEach(c => {
+    const el = document.getElementById(`scan-input-${c}-container`);
+    if (el) el.style.display = (c === chan) ? 'block' : 'none';
+  });
 }
 
-function handleFileSelected(input) {
-  const label = document.getElementById('file-drop-label');
-  if (input.files && input.files[0]) {
-    label.innerText = `Selected File: ${input.files[0].name}`;
+function handleFileSelected(input, channel) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const filename = file.name.toLowerCase();
+
+  // Strict file extension validation per channel
+  if (channel === 'eml' && !filename.endsWith('.eml')) {
+    showToast("⚠️ Please select a valid raw email file (.eml)");
+    input.value = '';
+    return;
   }
+  if (channel === 'image' && !/\.(png|jpg|jpeg|webp)$/i.test(filename)) {
+    showToast("⚠️ Screenshot/Image tab expects an image file (.png, .jpg, .jpeg, .webp)");
+    input.value = '';
+    return;
+  }
+  if (channel === 'audio' && !/\.(mp3|wav|ogg|m4a|flac)$/i.test(filename)) {
+    showToast("⚠️ Audio Deepfake tab expects an audio file (.mp3, .wav, .ogg, .flac). Switch to Video Forensics for video files!");
+    input.value = '';
+    return;
+  }
+  if (channel === 'video' && !/\.(mp4|avi|mov|mkv|webm)$/i.test(filename)) {
+    showToast("⚠️ Video Forensics tab expects a video file (.mp4, .avi, .mov, .mkv, .webm)");
+    input.value = '';
+    return;
+  }
+
+  const labelEl = document.getElementById(`label-file-${channel}`);
+  if (labelEl) labelEl.innerText = `Selected File: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
 }
 
 async function runAnalysis() {
@@ -328,28 +342,28 @@ async function runAnalysis() {
         badgeEl.innerText = 'SAFE';
       }
 
-      const flagDetails = (data.flags || []).map(f => `• ${f.detail}`).join('<br>') || 'No scam indicators detected.';
+      const flagDetails = (data.flags || []).map(f => `• ${f.detail || f.description || f.type}`).join('<br>') || 'No scam indicators detected.';
       expEl.innerHTML = flagDetails;
     } catch (e) {
       scoreEl.innerText = 'ERR';
       expEl.innerText = 'Analysis connection failed.';
     }
   } else {
-    const fileEl = document.getElementById('scan-file-input');
-    const file = fileEl.files[0];
-    if (!file) { showToast("Please select a file to analyze."); return; }
+    const fileEl = document.getElementById(`scan-file-${activeScanChannel}`);
+    const file = fileEl ? fileEl.files[0] : null;
+    if (!file) { showToast(`Please select a valid ${activeScanChannel.toUpperCase()} file to analyze.`); return; }
 
     scoreEl.innerText = '...';
-    expEl.innerText = `Analyzing file artifact (${file.name})...`;
+    expEl.innerText = `Analyzing ${activeScanChannel.toUpperCase()} file artifact (${file.name})...`;
 
     const formData = new FormData();
     formData.append('file', file);
     
-    let endpoint = '/forensics/media';
-    if (activeScanChannel === 'eml') endpoint = '/eml/analyze';
-    else if (activeScanChannel === 'image') endpoint = '/media/scan-qr';
-    else if (activeScanChannel === 'audio') endpoint = '/forensics/audio';
-    else if (activeScanChannel === 'video') endpoint = '/forensics/video';
+    let endpoint = '/media/analyze-image';
+    if (activeScanChannel === 'eml') endpoint = '/phishing/upload-eml';
+    else if (activeScanChannel === 'image') endpoint = '/media/analyze-image';
+    else if (activeScanChannel === 'audio') endpoint = '/media/analyze-audio';
+    else if (activeScanChannel === 'video') endpoint = '/media/analyze-video';
 
     try {
       const res = await fetch(`${CONFIG.apiEndpoint}${endpoint}`, {
@@ -357,13 +371,16 @@ async function runAnalysis() {
         body: formData
       });
       const data = await res.json();
-      const score = data.riskScore || data.risk_score || data.risk_fusion?.calibrated_score || 0;
+      const score = data.riskScore || data.risk_score || data.syntheticScore || data.risk_fusion?.calibrated_score || 0;
       scoreEl.innerText = `${score}%`;
       tierEl.innerText = data.verdict || (score >= 70 ? 'HIGH_RISK' : 'SAFE');
 
       if (score >= 70) {
         badgeEl.className = 'badge-tag badge-danger';
-        badgeEl.innerText = 'HIGH RISK ARTIFACT';
+        badgeEl.innerText = `HIGH RISK ${activeScanChannel.toUpperCase()}`;
+      } else if (score >= 30) {
+        badgeEl.className = 'badge-tag badge-suspicious';
+        badgeEl.innerText = 'SUSPICIOUS';
       } else {
         badgeEl.className = 'badge-tag badge-safe';
         badgeEl.innerText = 'SAFE / AUDITED';
@@ -373,7 +390,7 @@ async function runAnalysis() {
       expEl.innerHTML = flagDetails;
     } catch (e) {
       scoreEl.innerText = 'ERR';
-      expEl.innerText = 'File analysis failed.';
+      expEl.innerText = `${activeScanChannel.toUpperCase()} file analysis failed. Verify file format.`;
     }
   }
 }
@@ -494,6 +511,18 @@ window.addEventListener('DOMContentLoaded', () => {
   if (banner) banner.style.display = 'block';
   loadMlStatus();
 });
+
+function loadTabSample() {
+  if (activeScanChannel === 'text') {
+    const textEl = document.getElementById('scan-text-input');
+    if (textEl) {
+      textEl.value = "SEBI URGENT NOTICE: Your Demat account will be suspended within 24 hours due to non-KYC compliance. Click here to verify immediately: http://sebi-goviin.com/verify";
+      showToast("Sample SEBI Phishing SMS loaded.");
+    }
+  } else {
+    showToast(`Click the dropzone to select your ${activeScanChannel.toUpperCase()} file to audit.`);
+  }
+}
 
 async function loadMlStatus() {
   try {

@@ -780,6 +780,27 @@ app.get('/media/preview/:filename', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/assets/ela_sample.png'));
 });
 
+// Route aliases for multi-modal scanner paths
+app.post(['/eml/analyze', '/email/analyze'], mediaLimiter, upload.single('file'), (req, res, next) => {
+  req.url = '/phishing/upload-eml';
+  app._router.handle(req, res, next);
+});
+
+app.post(['/media/analyze', '/forensics/media'], mediaLimiter, upload.single('file'), (req, res, next) => {
+  req.url = '/media/analyze-image';
+  app._router.handle(req, res, next);
+});
+
+app.post(['/audio/analyze', '/forensics/audio'], mediaLimiter, upload.single('file'), (req, res, next) => {
+  req.url = '/media/analyze-audio';
+  app._router.handle(req, res, next);
+});
+
+app.post(['/video/analyze', '/forensics/video'], mediaLimiter, upload.single('file'), (req, res, next) => {
+  req.url = '/media/analyze-video';
+  app._router.handle(req, res, next);
+});
+
 // 4. AUTHENTICITY VERIFIER REGISTRY & PKI
 //
 // Registering an "official" communication asserts authenticity on behalf of a
