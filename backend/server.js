@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
+const fs = require('fs');
 
 const DBSqlite = require('./db_sqlite');
 const { signToken, attachUser, requireAuth, requireRole } = require('./auth');

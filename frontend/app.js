@@ -489,10 +489,32 @@ function dismissExtensionBanner() {
   sessionStorage.setItem('extension_banner_dismissed', 'true');
 }
 
-// Auto check banner dismissal state on load
+// Auto check banner dismissal state and load ML status on load
 window.addEventListener('DOMContentLoaded', () => {
   if (sessionStorage.getItem('extension_banner_dismissed') === 'true') {
     const banner = document.getElementById('extension-banner');
     if (banner) banner.style.display = 'none';
   }
+  loadMlStatus();
 });
+
+async function loadMlStatus() {
+  try {
+    const res = await fetch(`${CONFIG.apiEndpoint}/ml-status`);
+    const data = await res.json();
+    if (data && data.success && data.models) {
+      if (data.models.phishing) {
+        const elS = document.getElementById('ml-text-status');
+        if (elS) elS.textContent = `● ${data.models.phishing.status}`;
+      }
+      if (data.models.audio) {
+        const elS = document.getElementById('ml-audio-status');
+        if (elS) elS.textContent = `● ${data.models.audio.status}`;
+      }
+      if (data.models.media) {
+        const elS = document.getElementById('ml-media-status');
+        if (elS) elS.textContent = `● ${data.models.media.status}`;
+      }
+    }
+  } catch (e) {}
+}

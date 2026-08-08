@@ -146,33 +146,33 @@
             <div style="background:rgba(6,8,14,0.6); padding:14px; border-radius:var(--radius-md); border:1px solid var(--border-glass);">
               <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
                 <b style="color:#fff;">Text Phishing ML</b>
-                <span style="color:var(--neon-emerald); font-weight:800;">● READY</span>
+                <span id="ml-text-status" style="color:var(--neon-emerald); font-weight:800;">● READY</span>
               </div>
-              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">
-                Multinomial Naive Bayes TF-IDF · F1: <b style="color:var(--neon-amber);">93.2%</b><br>
-                SHA-256: <code style="color:var(--neon-cyan);">phishing_v1.0</code>
+              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);" id="ml-text-desc">
+                Multinomial Naive Bayes TF-IDF<br>
+                SHA-256: <code style="color:var(--neon-cyan);" id="ml-text-sha">VERIFIED</code>
               </div>
             </div>
 
             <div style="background:rgba(6,8,14,0.6); padding:14px; border-radius:var(--radius-md); border:1px solid var(--border-glass);">
               <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
                 <b style="color:#fff;">Audio Synthetic Speech ML</b>
-                <span style="color:var(--neon-emerald); font-weight:800;">● READY</span>
+                <span id="ml-audio-status" style="color:var(--neon-emerald); font-weight:800;">● READY</span>
               </div>
-              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">
-                Gaussian Acoustic (MFCC/FFT) · F1: <b style="color:var(--neon-amber);">92.5%</b><br>
-                SHA-256: <code style="color:var(--neon-cyan);">audio_v1.0</code>
+              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);" id="ml-audio-desc">
+                Gaussian Acoustic (MFCC/FFT)<br>
+                SHA-256: <code style="color:var(--neon-cyan);" id="ml-audio-sha">VERIFIED</code>
               </div>
             </div>
 
             <div style="background:rgba(6,8,14,0.6); padding:14px; border-radius:var(--radius-md); border:1px solid var(--border-glass);">
               <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
                 <b style="color:#fff;">Image Manipulation ML</b>
-                <span style="color:var(--neon-emerald); font-weight:800;">● READY</span>
+                <span id="ml-media-status" style="color:var(--neon-emerald); font-weight:800;">● READY</span>
               </div>
-              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">
-                Logistic (ELA/DQT Error) · F1: <b style="color:var(--neon-amber);">91.0%</b><br>
-                SHA-256: <code style="color:var(--neon-cyan);">media_v1.0</code>
+              <div style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);" id="ml-media-desc">
+                Logistic (ELA/DQT Error)<br>
+                SHA-256: <code style="color:var(--neon-cyan);" id="ml-media-sha">VERIFIED</code>
               </div>
             </div>
           </div>
