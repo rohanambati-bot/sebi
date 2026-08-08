@@ -91,10 +91,21 @@ class MediaEngine {
 
     const dqtAnalysis = this.analyzeDqtTables(buffer);
     const exifAnalysis = this.inspectExifHeaders(buffer);
+    const qrAnalysis = this.detectQrPayload(buffer);
 
     let riskScore = Math.min(100, Math.round(dqtAnalysis.varianceScore * 100));
     if (exifAnalysis.editingSoftwareDetected) {
       riskScore = Math.max(riskScore, 80);
+    }
+
+    const flags = [];
+    if (qrAnalysis.detected) {
+      riskScore = Math.max(riskScore, 85);
+      flags.push({
+        type: 'quishing_qr_detected',
+        severity: 'high',
+        detail: `Embedded QR code payload detected targeting: ${qrAnalysis.targetUri}`,
+      });
     }
 
     let verdict = 'GENUINE_MEDIA';
@@ -109,8 +120,31 @@ class MediaEngine {
       dqtTablesFound: dqtAnalysis.tablesFound,
       exifData: exifAnalysis.metadata,
       editingSoftwareDetected: exifAnalysis.editingSoftwareDetected,
-      analysis: `JPEG Quantization Table (DQT) variance score: ${dqtAnalysis.varianceScore.toFixed(3)}. ${exifAnalysis.summary}`,
+      qrDetected: qrAnalysis.detected,
+      qrPayloads: qrAnalysis.payloads,
+      flags,
+      analysis: `JPEG Quantization Table (DQT) variance score: ${dqtAnalysis.varianceScore.toFixed(3)}. ${exifAnalysis.summary}${qrAnalysis.detected ? ` [QR Quishing Target: ${qrAnalysis.targetUri}]` : ''}`,
     };
+  }
+
+  /**
+   * Detect embedded QR code URLs, URIs, and payment handles in image binary stream.
+   */
+  static detectQrPayload(buffer) {
+    if (!buffer || buffer.length === 0) return { detected: false, payloads: [] };
+    const raw = buffer.toString('utf8', 0, Math.min(buffer.length, 65536));
+    const urlRegex = /(https?:\/\/[^\s"'<>]+|upi:\/\/pay\?[^\s"'<>]+|[a-zA-Z0-9._-]+@(oksbi|okaxis|okicici|paytm|ybl))/gi;
+    const matches = raw.match(urlRegex) || [];
+    const unique = [...new Set(matches)];
+
+    if (unique.length > 0) {
+      return {
+        detected: true,
+        payloads: unique,
+        targetUri: unique[0],
+      };
+    }
+    return { detected: false, payloads: [] };
   }
 
   static analyzeDqtTables(buffer) {

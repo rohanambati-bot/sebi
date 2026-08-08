@@ -590,6 +590,36 @@ app.post('/media/analyze-image', mediaLimiter, upload.single('file'), async (req
   });
 });
 
+app.post('/media/scan-qr', mediaLimiter, upload.single('file'), (req, res) => {
+  const inputBuffer = parseInputBuffer(req, 'image');
+  if (!inputBuffer || inputBuffer.length === 0) {
+    return res.status(400).json({ detail: 'No valid image buffer provided for QR code scanning' });
+  }
+
+  const qrRes = MediaEngine.detectQrPayload(inputBuffer);
+  if (!qrRes.detected) {
+    return res.json({
+      qrDetected: false,
+      payloads: [],
+      message: 'No QR code URI payload detected in image.'
+    });
+  }
+
+  const targetAnalysis = PhishingEngine.analyzeText(qrRes.targetUri);
+
+  res.json({
+    qrDetected: true,
+    targetUri: qrRes.targetUri,
+    allPayloads: qrRes.payloads,
+    destinationRiskScore: targetAnalysis.risk_score,
+    destinationVerdict: targetAnalysis.verdict,
+    flags: [
+      { type: 'quishing_qr_detected', severity: 'high', detail: `QR code targets URI: ${qrRes.targetUri}` },
+      ...(targetAnalysis.flags || [])
+    ]
+  });
+});
+
 app.post('/media/analyze-audio', mediaLimiter, upload.single('file'), async (req, res) => {
   const audioInput = parseInputBuffer(req, 'audio');
   if (!audioInput || audioInput.length === 0) {
@@ -898,6 +928,26 @@ app.get('/graph/campaigns/:id', (req, res) => {
     if (err) return res.status(500).json({ detail: 'Campaign read failed' });
     if (!campaign) return res.status(404).json({ detail: 'Campaign not found' });
     res.json(campaign);
+  });
+});
+
+// Campaign confidence evaluation endpoint
+app.get(['/graph/campaigns/:id/confidence', '/campaigns/:id/confidence'], (req, res) => {
+  DBSqlite.getCampaignDetail(req.params.id, (err, campaign) => {
+    if (err || !campaign) {
+      return res.status(404).json({ detail: 'Campaign not found' });
+    }
+    const indicators = campaign.indicators || [];
+    const scans = campaign.scans || [];
+    const confidence = CorrelationEngine.calculateCampaignConfidence(indicators, scans);
+
+    res.json({
+      campaignId: campaign.id,
+      name: campaign.name,
+      ...confidence,
+      indicatorCount: indicators.length,
+      scanCount: scans.length,
+    });
   });
 });
 

@@ -8,6 +8,13 @@
 (function () {
   console.log('🛡️ SentinelSEBI Extension Active');
 
+  let API_BASE = 'http://127.0.0.1:8000';
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['sentinelApiBase'], (data) => {
+      if (data && data.sentinelApiBase) API_BASE = data.sentinelApiBase.replace(/\/$/, '');
+    });
+  }
+
   const OFFICIAL_DOMAINS = [
     'sebi.gov.in', 'nseindia.com', 'bseindia.com', 'cdslindia.com',
     'nsdl.co.in', 'zerodha.com', 'upstox.com', 'groww.in',
@@ -117,7 +124,7 @@
       if (!emailText || emailText.length < 15) return;
 
       try {
-        const res = await fetch('http://127.0.0.1:8000/phishing/analyze', {
+        const res = await fetch(`${API_BASE}/phishing/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: emailText, channel: location.host.includes('google') ? 'email' : 'chat' })
@@ -167,7 +174,7 @@
     if (!pageText || pageText.length < 30) return;
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/phishing/analyze', {
+      const res = await fetch(`${API_BASE}/phishing/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: pageText, channel: 'web' })

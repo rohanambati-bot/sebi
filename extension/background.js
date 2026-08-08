@@ -4,14 +4,15 @@
  * and automatic ingestion of scam evidence into the SEBI database platform.
  */
 
-const API_BASE = 'http://127.0.0.1:8000';
+let API_BASE = 'http://127.0.0.1:8000';
 const tabStateMap = {};
 let activeUserEmail = 'investor@sebi.gov.in';
 
-// Load saved user email from persistent chrome.storage
+// Load saved user email and backend API host from persistent chrome.storage
 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-  chrome.storage.local.get(['sentinelUserEmail'], (data) => {
+  chrome.storage.local.get(['sentinelUserEmail', 'sentinelApiBase'], (data) => {
     if (data && data.sentinelUserEmail) activeUserEmail = data.sentinelUserEmail;
+    if (data && data.sentinelApiBase) API_BASE = data.sentinelApiBase.replace(/\/$/, '');
   });
 }
 

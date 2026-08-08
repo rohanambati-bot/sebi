@@ -5,8 +5,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusBadge = document.getElementById('statusBadge');
   const statusText = document.getElementById('statusText');
   const statScans = document.getElementById('statScans');
+  const serverUrlInput = document.getElementById('serverUrlInput');
+  const saveServerBtn = document.getElementById('saveServerBtn');
 
-  const API_BASE = 'http://127.0.0.1:8000';
+  let API_BASE = 'http://127.0.0.1:8000';
+
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['sentinelApiBase'], (data) => {
+      if (data && data.sentinelApiBase) {
+        API_BASE = data.sentinelApiBase.replace(/\/$/, '');
+      }
+      if (serverUrlInput) serverUrlInput.value = API_BASE;
+      checkBackendHealth();
+    });
+  }
+
+  if (saveServerBtn) {
+    saveServerBtn.addEventListener('click', () => {
+      const inputVal = serverUrlInput ? serverUrlInput.value.trim() : '';
+      if (inputVal) {
+        API_BASE = inputVal.replace(/\/$/, '');
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ sentinelApiBase: API_BASE }, () => {
+            checkBackendHealth();
+            alert(`Backend host updated to: ${API_BASE}`);
+          });
+        }
+      }
+    });
+  }
 
   const setupBox = document.getElementById('sessionSetupBox');
   const activeBox = document.getElementById('sessionActiveBox');
