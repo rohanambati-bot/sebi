@@ -1602,36 +1602,24 @@ class DBSqlite {
     db.serialize(() => {
       db.run('PRAGMA foreign_keys = OFF');
 
-      let cleared = 0;
-      let errored = null;
-
       for (const table of tablesToClear) {
-        db.run(`DELETE FROM ${table}`, (err) => {
-          if (err) {
-            console.error(`[reset] failed to clear ${table}: ${err.message}`);
-            errored = err;
-          } else {
-            cleared++;
-          }
-        });
+        db.run(`DELETE FROM ${table}`);
       }
 
-      // Re-seed the two baseline threat_alerts rows after clearing
       db.run(`
-        INSERT INTO threat_alerts (title, description, severity, date_str, upi_id, domain)
+        INSERT OR REPLACE INTO threat_alerts (id, title, description, severity, date_str, upi_id, domain)
         VALUES
-          ('Fake Telegram Stock Tip Group Flagged', 'Scammers impersonating SEBI registered research analysts offering 500% guaranteed returns.', 'high', '2026-07-22', 'invest.now@oksbi', 'sebi-official-tips.xyz'),
-          ('Spoofed Broker Settlement Emails Detected', 'Phishing campaign spoofing Zerodha contract notes to steal trading credentials.', 'critical', '2026-07-21', 'settlement@paytm', 'broker-zerodha.online')
+          (1, 'Fake Telegram Stock Tip Group Flagged', 'Scammers impersonating SEBI registered research analysts offering 500% guaranteed returns.', 'high', '2026-07-22', 'invest.now@oksbi', 'sebi-official-tips.xyz'),
+          (2, 'Spoofed Broker Settlement Emails Detected', 'Phishing campaign spoofing Zerodha contract notes to steal trading credentials.', 'critical', '2026-07-21', 'settlement@paytm', 'broker-zerodha.online')
       `);
 
-      // Re-seed the baseline takedown row
       db.run(`
-        INSERT INTO takedowns (id, target_domain, scam_vpa, target_phone, threat_category, status, dot_dns_status, npci_vpa_status, date_str, legal_notice_text)
+        INSERT OR REPLACE INTO takedowns (id, target_domain, scam_vpa, target_phone, threat_category, status, dot_dns_status, npci_vpa_status, date_str, legal_notice_text)
         VALUES ('CERT-IN-1721642400000', 'sebi-official-tips.xyz', 'invest.now@oksbi', '+91 9876543210', 'Securities Market Impersonation Fraud', 'DISPATCHED_TO_DOT_NPCI', 'BLOCKED_BY_DOT', 'FROZEN_BY_NPCI', '2026-07-22', 'CERT-In Incident Report Sec 70B IT Act 2000')
       `);
 
-      db.run('PRAGMA foreign_keys = ON', () => {
-        if (errored) return callback(errored);
+      db.run('PRAGMA foreign_keys = ON', (err) => {
+        if (err) return callback(err);
         callback(null, { tablesCleared: tablesToClear.length, reseeded: true });
       });
     });
