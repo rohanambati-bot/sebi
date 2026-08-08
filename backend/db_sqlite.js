@@ -580,9 +580,85 @@ function seedDefaultUsers() {
  * that ALTER to finish, or it fails with "no such column" on an existing
  * sentinel.db. Awaited sequentially for exactly that reason.
  */
+function seedInitialCampaigns() {
+  return new Promise((resolve) => {
+    db.get(`SELECT COUNT(*) as count FROM campaigns`, (err, row) => {
+      if (err || (row && row.count > 0)) return resolve(false);
+
+      const now = new Date().toISOString();
+
+      db.run(
+        `INSERT INTO campaigns (label, cluster_method, member_count, max_risk_score, first_seen, last_seen, status, created_at, is_demo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        ['Operation PhishDemat — Fake Zerodha KYC Ring', 'shared_financial_handle', 4, 95, now, now, 'ACTIVE', now],
+        function (cErr) {
+          if (cErr) return resolve(false);
+          const cId1 = this.lastID;
+
+          const iocs1 = [
+            { type: 'sender_domain', value: 'sebi-goviin.com', risk: 95 },
+            { type: 'upi_vpa', value: 'scammer@oksbi', risk: 90 },
+            { type: 'telegram_handle', value: 't.me/sebi_official_ipo_tips', risk: 85 },
+            { type: 'phone_in', value: '+91 98765 43210', risk: 80 },
+          ];
+
+          iocs1.forEach((item) => {
+            db.run(
+              `INSERT OR IGNORE INTO iocs (type, value, first_seen, last_seen, sighting_count, confidence, max_risk_score)
+               VALUES (?, ?, ?, ?, 5, 90, ?)`,
+              [item.type, item.value, now, now, item.risk],
+              function () {
+                db.get(`SELECT id FROM iocs WHERE type = ? AND value = ?`, [item.type, item.value], (gErr, iocRow) => {
+                  if (iocRow) {
+                    db.run(`INSERT OR IGNORE INTO campaign_members (campaign_id, ioc_id) VALUES (?, ?)`, [cId1, iocRow.id]);
+                  }
+                });
+              }
+            );
+          });
+        }
+      );
+
+      db.run(
+        `INSERT INTO campaigns (label, cluster_method, member_count, max_risk_score, first_seen, last_seen, status, created_at, is_demo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        ['Operation HighYield — Unregistered Telegram Stock Tip Group', 'shared_telegram_handle', 3, 88, now, now, 'ACTIVE', now],
+        function (cErr) {
+          if (cErr) return resolve(false);
+          const cId2 = this.lastID;
+
+          const iocs2 = [
+            { type: 'domain', value: 'zer0dha-kyc-verify.in', risk: 88 },
+            { type: 'upi_vpa', value: 'investor_tips@paytm', risk: 85 },
+            { type: 'telegram_handle', value: 't.me/nse_guaranteed_500percent', risk: 90 },
+          ];
+
+          iocs2.forEach((item) => {
+            db.run(
+              `INSERT OR IGNORE INTO iocs (type, value, first_seen, last_seen, sighting_count, confidence, max_risk_score)
+               VALUES (?, ?, ?, ?, 3, 85, ?)`,
+              [item.type, item.value, now, now, item.risk],
+              function () {
+                db.get(`SELECT id FROM iocs WHERE type = ? AND value = ?`, [item.type, item.value], (gErr, iocRow) => {
+                  if (iocRow) {
+                    db.run(`INSERT OR IGNORE INTO campaign_members (campaign_id, ioc_id) VALUES (?, ?)`, [cId2, iocRow.id]);
+                  }
+                });
+              }
+            );
+          });
+        }
+      );
+
+      resolve(true);
+    });
+  });
+}
+
 const migrationsReady = (async () => {
   await migrateLegacyUsers();
   await seedDefaultUsers();
+  await seedInitialCampaigns();
 
   // Must run before the ensureColumn calls below: the legacy rebuild recreates
   // the scans table with every current column already present.

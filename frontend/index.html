@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SentinelSEBI — AI Financial Fraud Prevention Console</title>
-  <meta name="description" content="Unified AI-driven capital markets fraud prevention platform for SEBI retail investors and intermediaries.">
+  <title>SentinelSEBI — 3D Cyber Threat Intelligence &amp; Fraud Prevention Console</title>
+  <meta name="description" content="Unified 3D AI-driven capital markets fraud prevention platform for SEBI retail investors and intermediaries.">
   <link rel="stylesheet" href="index.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
       <div class="brand-logo">S</div>
       <div>
         <div class="brand-title">SentinelSEBI</div>
-        <div class="brand-subtitle">Investor Shield</div>
+        <div class="brand-subtitle">3D Shield</div>
       </div>
     </div>
 
@@ -58,17 +58,16 @@
 
   <!-- ─────────────────── Main Area ─────────────────── -->
   <main class="main-wrapper">
-    <!-- Top Glass Navbar -->
     <header class="topbar">
       <div class="page-heading">
-        <h1 id="view-title">Dashboard Overview</h1>
+        <h1 id="view-title">3D Interactive Threat Command Center</h1>
         <p id="view-desc">Protecting retail investors from AI-driven financial fraud in India's capital markets.</p>
       </div>
 
       <div class="topbar-actions">
         <div class="system-status-pill">
           <div class="status-dot-pulse"></div>
-          <span>Sentinel Engine v2.4 Active</span>
+          <span>Sentinel 3D Engine v2.4</span>
         </div>
         <button class="btn-role-toggle" onclick="ensureAdmin().then(ok => { if(ok) switchTab('reports'); })">
           🔐 Admin Mode
@@ -76,11 +75,11 @@
       </div>
     </header>
 
-    <!-- Workspace View Panels -->
     <div class="workspace">
       
       <!-- 1. DASHBOARD PANEL -->
       <section id="panel-dashboard" class="tab-panel active">
+        <!-- Metric Cards -->
         <div class="metrics-grid">
           <div class="glass-panel metric-card">
             <div class="metric-header"><span>TOTAL SCANS</span>⚡</div>
@@ -101,6 +100,23 @@
             <div class="metric-header"><span>ACTIVE ALERTS</span>⚠️</div>
             <div class="metric-value" id="stat-alerts">2</div>
             <div class="metric-subtitle">Live Takedown Notices</div>
+          </div>
+        </div>
+
+        <!-- 3D Interactive WebGL Threat Globe Canvas -->
+        <div class="glass-panel" style="padding: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div>
+              <h3 style="font-family: var(--font-heading); font-size: 17px; color:#fff;">
+                🌐 3D Interactive WebGL Threat Mesh &amp; Correlation Globe
+              </h3>
+              <p style="font-size:12px; color:var(--text-muted);">Click and drag to rotate the 3D threat mesh in 360°. Scroll wheel to zoom in/out.</p>
+            </div>
+            <div class="overlay-3d-hud">3D GRAPH INTERACTIVE MODE</div>
+          </div>
+
+          <div class="container-3d-threat">
+            <canvas id="canvas-3d-threat"></canvas>
           </div>
         </div>
 
@@ -127,20 +143,17 @@
           </div>
 
           <div class="scanner-container">
-            <!-- Left Input -->
             <div style="display:flex; flex-direction:column; gap:16px;">
-              <!-- Text Input -->
               <div id="scan-input-text-container">
-                <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">PASTE SUSPICIOUS TEXT / SMS / WHATSAPP MESSAGE</label>
-                <textarea id="scan-text-input" class="input-glass" rows="6" placeholder="Dear Customer, SEBI URGENT NOTICE: Your trading account will be suspended. Verify immediately at http://sebi-goviin.com/verify and enter your OTP..."></textarea>
+                <label style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; display:block;">PASTE SUSPICIOUS TEXT / SMS / WHATSAPP MESSAGE</label>
+                <textarea id="scan-text-input" class="input-glass" rows="6" placeholder="Dear Customer, SEBI URGENT NOTICE: Your trading account will be suspended. Verify immediately at http://sebi-goviin.com/verify..."></textarea>
               </div>
 
-              <!-- EML / File Upload Dropzone -->
               <div id="scan-input-file-container" style="display:none;">
-                <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">UPLOAD ARTIFACT FILE</label>
+                <label style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; display:block;">UPLOAD ARTIFACT FILE</label>
                 <div class="dropzone" onclick="document.getElementById('scan-file-input').click()">
-                  <div style="font-size:28px; margin-bottom:8px;">📁</div>
-                  <div style="font-weight:600; color:#fff;" id="file-drop-label">Click or Drag &amp; Drop EML, Screenshot, Audio, or Video File</div>
+                  <div style="font-size:32px; margin-bottom:8px;">📁</div>
+                  <div style="font-weight:700; color:#fff;" id="file-drop-label">Click or Drag &amp; Drop EML, Screenshot, Audio, or Video File</div>
                   <div style="font-size:11px; color:var(--text-subtle); margin-top:4px;">Supports EML, JPEG, PNG, MP3, WAV, MP4, AVI</div>
                   <input type="file" id="scan-file-input" style="display:none;" onchange="handleFileSelected(this)">
                 </div>
@@ -154,9 +167,8 @@
               </div>
             </div>
 
-            <!-- Right Verdict Card -->
             <div class="glass-panel verdict-card" id="verdict-card">
-              <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">AI Risk Verdict</div>
+              <div style="font-size:12px; font-weight:800; color:var(--text-muted); text-transform:uppercase;">AI Risk Verdict</div>
               <div class="risk-score-circle" id="verdict-score-ring">
                 <div>
                   <div class="risk-score-value" id="verdict-score">0%</div>
@@ -184,23 +196,23 @@
 
           <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
             <div>
-              <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">ENTER SENTINEL VERIFICATION CODE</label>
+              <label style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; display:block;">ENTER SENTINEL VERIFICATION CODE</label>
               <div style="display:flex; gap:10px;">
                 <input type="text" id="verify-code-input" class="input-glass" placeholder="e.g. VERIFY-9D1D8E6F">
                 <button class="btn-primary" onclick="verifyByCode()">Verify</button>
               </div>
             </div>
             <div>
-              <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:6px; display:block;">OR PASTE FULL CIRCULAR TEXT</label>
+              <label style="font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; display:block;">OR PASTE FULL CIRCULAR TEXT</label>
               <textarea id="check-content-input" class="input-glass" rows="2" placeholder="Paste circular text for fuzzy Levenshtein registry comparison..."></textarea>
               <button class="btn-secondary" onclick="verifyByContent()" style="margin-top:8px;">Verify Content</button>
             </div>
           </div>
 
           <div id="verify-result-box" class="glass-panel" style="margin-top:24px; padding:20px; display:none;">
-            <div id="verify-verdict-title" style="font-weight:700; font-size:16px; color:var(--accent-emerald);"></div>
+            <div id="verify-verdict-title" style="font-weight:700; font-size:16px; color:var(--neon-emerald);"></div>
             <div id="verify-verdict-msg" style="color:var(--text-muted); margin-top:4px;"></div>
-            <div id="verify-badge-issuer" style="font-size:11px; font-family:var(--font-mono); color:var(--accent-amber); margin-top:8px;"></div>
+            <div id="verify-badge-issuer" style="font-size:11px; font-family:var(--font-mono); color:var(--neon-amber); margin-top:8px;"></div>
           </div>
         </div>
       </section>
@@ -261,7 +273,7 @@
           </h3>
           <div style="max-width:500px; display:flex; flex-direction:column; gap:16px;">
             <div>
-              <label style="font-size:12px; font-weight:600; color:var(--text-muted); display:block; margin-bottom:6px;">BACKEND SERVER API HOST</label>
+              <label style="font-size:12px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">BACKEND SERVER API HOST</label>
               <input type="text" id="setting-api-host" class="input-glass" value="http://127.0.0.1:8000">
             </div>
             <button class="btn-primary" onclick="saveSettings()">Save Configuration</button>
@@ -273,10 +285,10 @@
   </main>
 </div>
 
-<!-- Toast element -->
 <div id="system-toast"></div>
 
 <!-- Scripts -->
+<script src="threat_3d.js"></script>
 <script src="app.js"></script>
 <script src="reports.js"></script>
 </body>
