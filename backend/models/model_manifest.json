@@ -1,24 +1,21 @@
 {
   "manifest_version": "1.0.0",
-  "generated_at": "2026-08-08T14:47:51.971Z",
+  "generated_at": "2026-08-08T15:02:55.362Z",
   "models": {
     "phishing_ml_model.json": {
-      "sha256": "e87ee2bd47f9a24980e6bbb286fe8a7ef60ba1702673564f4d3b5a0a228ba6c1",
+      "sha256": "64d657bde1684a9d701ac7f33b955b10b13be6b75d8821f46020147d837d7529",
       "model_version": "1.0.0",
-      "model_type": "multinomial_naive_bayes_tfidf",
-      "f1_score": 0.932
+      "model_type": "multinomial_naive_bayes_tfidf"
     },
     "audio_ml_model.json": {
-      "sha256": "a965cdaf7b15c632d41a0bf0bb59a5422ab13061520fae2c4c56e5f48aa52bd6",
+      "sha256": "e3ccd821a13b57be320cc41d657d5a80b178b9d674282e566336c2e12eaffa1a",
       "model_version": "1.0.0",
-      "model_type": "gaussian_acoustic_classifier",
-      "f1_score": 0.925
+      "model_type": "gaussian_acoustic_classifier"
     },
     "media_ml_model.json": {
-      "sha256": "147841f1d44e4888a0a6d9c255b8bb694dd55efb86808e1177f11474514a6db9",
+      "sha256": "ae469d8ecf3370166418d6623602cdb1d81d674f247b0f8afe72ebce281fa168",
       "model_version": "1.0.0",
-      "model_type": "logistic_ela_dqt_classifier",
-      "f1_score": 0.91
+      "model_type": "logistic_ela_dqt_classifier"
     }
   }
 }

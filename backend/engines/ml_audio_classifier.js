@@ -26,10 +26,15 @@ class MlAudioClassifier {
 
       const expectedHash = manifest.models && manifest.models['audio_ml_model.json'] ? manifest.models['audio_ml_model.json'].sha256 : null;
 
-      if (expectedHash && actualHash === expectedHash) {
-        this.sha256Verified = true;
+      if (!expectedHash || actualHash !== expectedHash) {
+        console.warn('[MlAudioClassifier] SHA-256 integrity hash mismatch! Forcing FALLBACK.');
+        this.status = 'FALLBACK';
+        this.sha256Verified = false;
+        this.model = null;
+        return;
       }
 
+      this.sha256Verified = true;
       this.model = JSON.parse(fileBuffer.toString('utf8'));
       this.status = 'READY';
     } catch (e) {

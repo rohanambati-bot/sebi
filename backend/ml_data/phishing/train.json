@@ -3,8 +3,12 @@
   {"text": "Exclusive stock tip! Buy XYZ Securities for 500% guaranteed profit in 3 days. Join our secret SEBI approved Telegram group: https://t.me/sebi_vip_signals", "label": "phishing", "campaign": "Campaign_A"},
   {"text": "Pay 10000 INR to unlock your frozen Zerodha trading account immediately. UPI VPA: sebi.support@upi", "label": "phishing", "campaign": "Campaign_B"},
   {"text": "URGENT SEBI ALERT: High yield intraday tips with zero risk. Transfer funds to our verified pool account at scam-broker.com", "label": "phishing", "campaign": "Campaign_B"},
+  {"text": "SEBI ALERT: Special pre-IPO share allocation available for retail investors. Reserve your quota before subscription closes: http://sebi-ipo-portal.xyz", "label": "phishing", "campaign": "Campaign_C"},
+  {"text": "Your Groww Demat account login flagged from unknown device in Moscow. Verify your trading PIN immediately at http://groww-security-check.com", "label": "phishing", "campaign": "Campaign_C"},
   {"text": "Dear investor, your Demat account KYC has been updated successfully with Zerodha Broking Ltd. No action required.", "label": "legitimate", "campaign": "Legit_1"},
   {"text": "NSE Circular No. 49510: Guidance on Margin Trading Facility (MTF) quarterly disclosures for registered stock brokers.", "label": "legitimate", "campaign": "Legit_1"},
   {"text": "SEBI Press Release PR No. 12/2026: Caution against unregistered entity impersonating SEBI officials offering guaranteed returns.", "label": "legitimate", "campaign": "Legit_2"},
-  {"text": "Your contract note for trade executed on BSE on 08-AUG-2026 has been generated. Download password protected PDF from official broker portal.", "label": "legitimate", "campaign": "Legit_2"}
+  {"text": "Your contract note for trade executed on BSE on 08-AUG-2026 has been generated. Download password protected PDF from official broker portal.", "label": "legitimate", "campaign": "Legit_2"},
+  {"text": "BSE Circular: Trading holiday notification for Independence Day. Clearing and settlement schedules revised.", "label": "legitimate", "campaign": "Legit_3"},
+  {"text": "CDSL e-Voting notification: Cast your vote for upcoming Annual General Meeting resolutions of Reliance Industries Ltd.", "label": "legitimate", "campaign": "Legit_3"}
 ]

@@ -29,41 +29,57 @@ function tokenize(text) {
 }
 
 function trainPhishingTextModel() {
-  console.log('\n🤖 Training Phishing Text ML Classifier (Multinomial Naive Bayes TF-IDF)...');
+  console.log('\n🤖 Training Phishing Text ML Classifier (Multinomial Naive Bayes with TF-IDF Vectorization)...');
   const trainPath = path.join(__dirname, '..', 'ml_data', 'phishing', 'train.json');
   const dataset = JSON.parse(fs.readFileSync(trainPath, 'utf8'));
 
-  const vocabCount = {};
+  const N = dataset.length;
+  const df = {};
   const docCounts = { phishing: 0, legitimate: 0 };
-  const wordCounts = { phishing: {}, legitimate: {} };
-  const totalWords = { phishing: 0, legitimate: 0 };
+  const termTfIdfSum = { phishing: {}, legitimate: {} };
+  const totalTfIdfSum = { phishing: 0, legitimate: 0 };
 
+  // 1. Calculate Document Frequency (DF)
+  dataset.forEach(item => {
+    docCounts[item.label]++;
+    const uniqueTokens = new Set(tokenize(item.text));
+    uniqueTokens.forEach(t => { df[t] = (df[t] || 0) + 1; });
+  });
+
+  // 2. Calculate Smooth IDF: log((N + 1) / (df + 1)) + 1
+  const idf = {};
+  Object.keys(df).forEach(t => {
+    idf[t] = Math.log((N + 1) / (df[t] + 1)) + 1;
+  });
+
+  // 3. Compute TF-IDF weights per document
   dataset.forEach(item => {
     const label = item.label;
-    docCounts[label]++;
     const tokens = tokenize(item.text);
-    
-    tokens.forEach(token => {
-      vocabCount[token] = (vocabCount[token] || 0) + 1;
-      wordCounts[label][token] = (wordCounts[label][token] || 0) + 1;
-      totalWords[label]++;
+    const tf = {};
+    tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+
+    Object.keys(tf).forEach(t => {
+      const tfidfWeight = (tf[t] / tokens.length) * idf[t];
+      termTfIdfSum[label][t] = (termTfIdfSum[label][t] || 0) + tfidfWeight;
+      totalTfIdfSum[label] += tfidfWeight;
     });
   });
 
-  const vocab = Object.keys(vocabCount);
+  const vocab = Object.keys(df);
   const vocabSize = vocab.length;
   const alpha = 1.0; // Laplace smoothing
 
   const logPriors = {
-    phishing: Math.log(docCounts.phishing / dataset.length),
-    legitimate: Math.log(docCounts.legitimate / dataset.length)
+    phishing: Math.log(docCounts.phishing / N),
+    legitimate: Math.log(docCounts.legitimate / N)
   };
 
   const logLikelihoods = { phishing: {}, legitimate: {} };
 
-  vocab.forEach(token => {
-    logLikelihoods.phishing[token] = Math.log(((wordCounts.phishing[token] || 0) + alpha) / (totalWords.phishing + alpha * vocabSize));
-    logLikelihoods.legitimate[token] = Math.log(((wordCounts.legitimate[token] || 0) + alpha) / (totalWords.legitimate + alpha * vocabSize));
+  vocab.forEach(t => {
+    logLikelihoods.phishing[t] = Math.log(((termTfIdfSum.phishing[t] || 0) + alpha) / (totalTfIdfSum.phishing + alpha * vocabSize));
+    logLikelihoods.legitimate[t] = Math.log(((termTfIdfSum.legitimate[t] || 0) + alpha) / (totalTfIdfSum.legitimate + alpha * vocabSize));
   });
 
   const modelPayload = {
@@ -71,20 +87,13 @@ function trainPhishingTextModel() {
     model_type: "multinomial_naive_bayes_tfidf",
     trained_at: new Date().toISOString(),
     dataset_version: "phishing-v1",
-    feature_schema: "word_char_1_2_3_grams",
-    training_samples: dataset.length,
+    feature_schema: "word_char_1_2_3_grams_tfidf",
+    training_samples: N,
     alpha: alpha,
     vocab_size: vocabSize,
+    idf: idf,
     log_priors: logPriors,
-    log_likelihoods: logLikelihoods,
-    metrics: {
-      precision: 0.945,
-      recall: 0.920,
-      f1: 0.932,
-      roc_auc: 0.958,
-      pr_auc: 0.951,
-      brier_score: 0.042
-    }
+    log_likelihoods: logLikelihoods
   };
 
   const outPath = path.join(__dirname, '..', 'models', 'phishing_ml_model.json');
@@ -140,15 +149,7 @@ function trainAudioModel() {
       natural_human: humanFeatures.length / dataset.length
     },
     synth_stats: synthStats,
-    human_stats: humanStats,
-    metrics: {
-      precision: 0.938,
-      recall: 0.912,
-      f1: 0.925,
-      roc_auc: 0.949,
-      pr_auc: 0.942,
-      brier_score: 0.051
-    }
+    human_stats: humanStats
   };
 
   const outPath = path.join(__dirname, '..', 'models', 'audio_ml_model.json');
@@ -157,13 +158,53 @@ function trainAudioModel() {
 }
 
 function trainMediaModel() {
-  console.log('\n🤖 Training Image Manipulation Artifact ML Classifier (ELA/DQT Logistic)...');
+  console.log('\n🤖 Training Image Manipulation Artifact ML Classifier (Dynamic Logistic Regression Training)...');
   const trainPath = path.join(__dirname, '..', 'ml_data', 'media', 'train.json');
   const dataset = JSON.parse(fs.readFileSync(trainPath, 'utf8'));
 
-  // ELA variance, DQT error, Metadata anomaly score
-  const weights = [0.085, 0.120, 2.500];
-  const bias = -4.500;
+  // Extract feature columns
+  const elaVals = dataset.map(d => d.features.ela_variance);
+  const dqtVals = dataset.map(d => d.features.dqt_quant_error);
+  const metaVals = dataset.map(d => d.features.metadata_anomaly_score);
+
+  const meanEla = elaVals.reduce((a, b) => a + b, 0) / elaVals.length;
+  const stdEla = Math.sqrt(elaVals.reduce((a, b) => a + Math.pow(b - meanEla, 2), 0) / elaVals.length) || 1;
+
+  const meanDqt = dqtVals.reduce((a, b) => a + b, 0) / dqtVals.length;
+  const stdDqt = Math.sqrt(dqtVals.reduce((a, b) => a + Math.pow(b - meanDqt, 2), 0) / dqtVals.length) || 1;
+
+  const meanMeta = metaVals.reduce((a, b) => a + b, 0) / metaVals.length;
+  const stdMeta = Math.sqrt(metaVals.reduce((a, b) => a + Math.pow(b - meanMeta, 2), 0) / metaVals.length) || 1;
+
+  // Batch Gradient Descent Logistic Regression Training
+  let w0 = 0.1, w1 = 0.1, w2 = 0.1, b = 0.0;
+  const lr = 0.1;
+  const epochs = 300;
+
+  for (let epoch = 0; epoch < epochs; epoch++) {
+    let dw0 = 0, dw1 = 0, dw2 = 0, db = 0;
+    dataset.forEach(item => {
+      const x0 = (item.features.ela_variance - meanEla) / stdEla;
+      const x1 = (item.features.dqt_quant_error - meanDqt) / stdDqt;
+      const x2 = (item.features.metadata_anomaly_score - meanMeta) / stdMeta;
+      const y = item.label === 'manipulated' ? 1 : 0;
+
+      const z = w0 * x0 + w1 * x1 + w2 * x2 + b;
+      const p = 1 / (1 + Math.exp(-Math.max(-10, Math.min(10, z))));
+      const err = p - y;
+
+      dw0 += err * x0;
+      dw1 += err * x1;
+      dw2 += err * x2;
+      db += err;
+    });
+
+    const m = dataset.length;
+    w0 -= lr * (dw0 / m);
+    w1 -= lr * (dw1 / m);
+    w2 -= lr * (dw2 / m);
+    b -= lr * (db / m);
+  }
 
   const modelPayload = {
     model_version: "1.0.0",
@@ -172,23 +213,15 @@ function trainMediaModel() {
     dataset_version: "media-manipulation-v1",
     feature_schema: "ela_variance_dqt_quant_error_metadata_anomaly",
     training_samples: dataset.length,
-    weights: weights,
-    bias: bias,
-    feature_mean: [29.8, 11.0, 0.47],
-    feature_std: [20.2, 8.8, 0.40],
-    metrics: {
-      precision: 0.925,
-      recall: 0.895,
-      f1: 0.910,
-      roc_auc: 0.935,
-      pr_auc: 0.928,
-      brier_score: 0.058
-    }
+    weights: [Number(w0.toFixed(4)), Number(w1.toFixed(4)), Number(w2.toFixed(4))],
+    bias: Number(b.toFixed(4)),
+    feature_mean: [Number(meanEla.toFixed(4)), Number(meanDqt.toFixed(4)), Number(meanMeta.toFixed(4))],
+    feature_std: [Number(stdEla.toFixed(4)), Number(stdDqt.toFixed(4)), Number(stdMeta.toFixed(4))]
   };
 
   const outPath = path.join(__dirname, '..', 'models', 'media_ml_model.json');
   fs.writeFileSync(outPath, JSON.stringify(modelPayload, null, 2));
-  console.log(`  ✓ Saved Image Manipulation Artifact ML Model to ${outPath}`);
+  console.log(`  ✓ Dynamically Trained Image Manipulation ML Model saved to ${outPath}`);
 }
 
 function generateManifest() {
@@ -210,8 +243,7 @@ function generateManifest() {
       manifest.models[file] = {
         sha256: sha256,
         model_version: modelData.model_version || "1.0.0",
-        model_type: modelData.model_type,
-        f1_score: modelData.metrics ? modelData.metrics.f1 : null
+        model_type: modelData.model_type
       };
     }
   });
@@ -229,7 +261,7 @@ function runAll() {
   trainAudioModel();
   trainMediaModel();
   generateManifest();
-  console.log('\n✅ ALL MULTI-MODAL ML MODELS TRAINED & VERIFIED MANIFEST CREATED CLEANLY.\n');
+  console.log('\n✅ ALL MULTI-MODAL ML MODELS TRAINED DYNAMICALLY & MANIFEST GENERATED CLEANLY.\n');
 }
 
 runAll();
