@@ -554,6 +554,12 @@ app.post('/media/analyze-image', mediaLimiter, upload.single('file'), async (req
     flags: [{ type: 'image_forensics', severity: result.risk_score > 60 ? 'high' : 'low', detail: result.analysis || '' }],
     created_at: new Date().toISOString(),
     evidence_sha256: retained?.sha256 ?? null,
+    forensics: {
+      exifData: result.exifData || null,
+      cameraMake: result.cameraMake || null,
+      cameraModel: result.cameraModel || null,
+      elaScore: result.elaScore || 0
+    },
     ...actorFields(req),
   }, (err, id) => {
     audit(req, 'SCAN_IMAGE', {

@@ -1,0 +1,28 @@
+[
+  {
+    "id": "audio_val_synth_01",
+    "speaker": "Speaker_Val_1",
+    "label": "synthetic_speech",
+    "features": {
+      "zcr": 0.380,
+      "spectral_centroid": 2450.0,
+      "spectral_bandwidth": 2100.0,
+      "spectral_rolloff": 3900.0,
+      "energy_variance": 0.0003,
+      "mfccs": [18.2, -6.1, 11.5, 3.2, -3.1, 1.2, -1.8, 1.1, -0.9, 0.6, -0.4, 0.3, -0.2]
+    }
+  },
+  {
+    "id": "audio_val_human_01",
+    "speaker": "Speaker_Val_2",
+    "label": "natural_human",
+    "features": {
+      "zcr": 0.082,
+      "spectral_centroid": 1150.0,
+      "spectral_bandwidth": 1350.0,
+      "spectral_rolloff": 2400.0,
+      "energy_variance": 0.0280,
+      "mfccs": [-12.5, 24.8, -14.2, 5.8, -8.9, 3.4, -4.2, 2.1, -1.8, 0.9, -0.6, 0.4, -0.3]
+    }
+  }
+]

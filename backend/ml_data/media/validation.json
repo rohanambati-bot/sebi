@@ -1,0 +1,22 @@
+[
+  {
+    "id": "media_val_manip_01",
+    "source_group": "Media_Group_Val_1",
+    "label": "manipulated",
+    "features": {
+      "ela_variance": 28.5,
+      "dqt_quant_error": 8.2,
+      "metadata_anomaly_score": 0.85
+    }
+  },
+  {
+    "id": "media_val_auth_01",
+    "source_group": "Media_Group_Val_2",
+    "label": "authentic",
+    "features": {
+      "ela_variance": 1.2,
+      "dqt_quant_error": 0.4,
+      "metadata_anomaly_score": 0.05
+    }
+  }
+]

@@ -74,18 +74,29 @@ class MlPhishingClassifier {
     }
 
     const tokens = this.tokenize(text);
-    const { log_priors, log_likelihoods } = this.model;
+    const { log_priors, log_likelihoods, idf } = this.model;
+
+    const tf = {};
+    tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
 
     let scorePhishing = log_priors.phishing;
     let scoreLegit = log_priors.legitimate;
-    const matchedFeatures = [];
+    const topFeatureContribs = [];
 
-    tokens.forEach(token => {
-      if (log_likelihoods.phishing[token] !== undefined) {
-        scorePhishing += log_likelihoods.phishing[token];
-        scoreLegit += log_likelihoods.legitimate[token];
-        const diff = log_likelihoods.phishing[token] - log_likelihoods.legitimate[token];
-        if (diff > 0.5) matchedFeatures.push({ token, weight: Number(diff.toFixed(3)) });
+    Object.keys(tf).forEach(t => {
+      const termIdf = (idf && idf[t]) ? idf[t] : 1.0;
+      const weight = (tf[t] / tokens.length) * termIdf;
+
+      if (log_likelihoods.phishing[t]) {
+        scorePhishing += log_likelihoods.phishing[t] * weight;
+      }
+      if (log_likelihoods.legitimate[t]) {
+        scoreLegit += log_likelihoods.legitimate[t] * weight;
+      }
+
+      if (log_likelihoods.phishing[t] && log_likelihoods.legitimate[t]) {
+        const contrib = log_likelihoods.phishing[t] - log_likelihoods.legitimate[t];
+        if (contrib > 0) topFeatureContribs.push({ feature: t, weight: parseFloat(contrib.toFixed(3)) });
       }
     });
 
@@ -95,7 +106,7 @@ class MlPhishingClassifier {
     const expLegit = Math.exp(scoreLegit - maxScore);
     const probability = expPhish / (expPhish + expLegit);
 
-    matchedFeatures.sort((a, b) => b.weight - a.weight);
+    topFeatureContribs.sort((a, b) => b.weight - a.weight);
 
     return {
       model_status: 'READY',
@@ -104,7 +115,7 @@ class MlPhishingClassifier {
       ml_probability: Number(probability.toFixed(3)),
       sha256_verified: this.sha256Verified,
       metrics: this.model.metrics,
-      top_features: matchedFeatures.slice(0, 5)
+      top_features: topFeatureContribs.slice(0, 5)
     };
   }
 }

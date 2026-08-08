@@ -110,6 +110,17 @@ class AudioEngine {
     const zcr = this.calculatePcmZcr(pcmSamples);
     const spectralRolloffHz = Math.round(wavInfo.sampleRate * 0.85);
 
+    // Compute dynamic MFCC 1-13 acoustic approximations from PCM sample stream
+    const mfccDyn = [];
+    const numSamples = Math.min(pcmSamples.length, 1024);
+    for (let k = 1; k <= 13; k++) {
+      let energyBand = 0;
+      for (let i = 0; i < numSamples; i += 16) {
+        energyBand += Math.abs(pcmSamples[i] || 0) * Math.cos((Math.PI * k * (i + 0.5)) / 1024);
+      }
+      mfccDyn.push(parseFloat((energyBand / (numSamples / 16)).toFixed(3)));
+    }
+
     const mlAudio = require('./ml_audio_classifier');
     const mlRes = mlAudio.predict({
       zcr,
@@ -117,7 +128,7 @@ class AudioEngine {
       spectral_bandwidth: 1900,
       spectral_rolloff: spectralRolloffHz,
       energy_variance: 0.001,
-      mfccs: [12.0, -4.0, 8.0, 1.5, -2.0, 0.4, -1.0, 0.8, -0.5, 0.3, -0.2, 0.1, -0.1]
+      mfccs: mfccDyn
     });
 
     let syntheticScore = mlRes.synthetic_speech_probability !== null ? Math.round(mlRes.synthetic_speech_probability * 100) : Math.round((fftResults.spectralFlatness * 60) + (zcr * 40));

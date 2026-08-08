@@ -1,7 +1,7 @@
 {
   "model_version": "1.0.0",
   "model_type": "logistic_ela_dqt_classifier",
-  "trained_at": "2026-08-08T15:10:12.183Z",
+  "trained_at": "2026-08-08T15:21:35.032Z",
   "dataset_version": "media-manipulation-v1",
   "feature_schema": "ela_variance_dqt_quant_error_metadata_anomaly",
   "training_samples": 4,
