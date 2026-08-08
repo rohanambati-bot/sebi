@@ -10,6 +10,7 @@
 
 const { parse: parseDomain } = require('tldts');
 const IocExtractor = require('./ioc_extractor');
+const SebiAdvisoryIndex = require('./sebi_advisory_index');
 
 const OFFICIAL_DOMAINS = [
   // Regulator
@@ -213,6 +214,20 @@ class PhishingEngine {
     // crypto wallets, IFSC/account pairs. These are the identifiers that
     // actually get accounts frozen; previously nothing extracted them.
     const iocs = IocExtractor.extract(content);
+
+    // SEBI Regulatory Advisory Contradiction Check (Grounding RAG Layer)
+    const advisoryCheck = SebiAdvisoryIndex.checkAdvisoryContradiction(content);
+    if (advisoryCheck.contradicted) {
+      cumulativeRiskScore += 35;
+      for (const match of advisoryCheck.matches) {
+        flags.push({
+          type: 'sebi_advisory_contradiction',
+          severity: 'critical',
+          detail: match.detail,
+          ref: match.ref,
+        });
+      }
+    }
 
     const finalScore = Math.min(100, Math.max(0, Math.round(cumulativeRiskScore)));
 

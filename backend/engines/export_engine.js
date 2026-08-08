@@ -390,6 +390,34 @@ class ExportEngine {
       '================================================================================',
     ].join('\n');
   }
+
+  /**
+   * Pre-formatted NPCI Payment Security UPI VPA Freeze Notice.
+   */
+  static generateNpciFreezeNotice({ noticeId, vpa, scanId, evidenceHash }) {
+    const timestamp = new Date().toISOString();
+    const ref = noticeId || `NPCI-FREEZE-${Date.now()}`;
+
+    return [
+      '================================================================================',
+      'NPCI PAYMENT SECURITY DIRECTIVE — IMMEDIATE UPI VPA FREEZE',
+      `Ref No: ${ref}`,
+      `Date: ${timestamp}`,
+      'Authority: Payment and Settlement Systems Act, 2007 (Section 18)',
+      '================================================================================',
+      '',
+      '1. TARGET PAYMENT INSTRUMENT',
+      `   Fraudulent UPI VPA: ${vpa || 'N/A'}`,
+      `   Associated Scan Reference: ${scanId || 'N/A'}`,
+      `   Evidence Payload SHA-256: ${evidenceHash || 'N/A'}`,
+      '',
+      '2. DIRECTIVE',
+      '   - Immediately suspend outbound debit/credit processing for target VPA',
+      '   - Flag linked IFSC & bank account number in National Cyber Crime Reporting Portal (NCRP)',
+      '   - Retain transaction ledger logs for law enforcement inquiry',
+      '================================================================================',
+    ].join('\n');
+  }
 }
 
 module.exports = { ExportEngine, stixId, stixPatternFor, ATTACK_TECHNIQUES };

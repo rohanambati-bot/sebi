@@ -1614,8 +1614,57 @@ app.get('/brandwatch/alerts', (req, res) => {
   });
 });
 
+// ── Real-Time Threat Intelligence Feeds ─────────────────────────────────
+app.get('/feed/csv', (req, res) => {
+  DBSqlite.getAllIocs((err, rows) => {
+    if (err) return res.status(500).json({ detail: 'Failed to fetch threat intelligence feed' });
+    const header = 'type,value,confidence_score,created_at\n';
+    const lines = (rows || []).map(r => `${r.type},"${r.value}",${r.confidence_score || 85},"${r.created_at}"`).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="sentinel_threat_intel_feed.csv"');
+    res.send(header + lines);
+  });
+});
+
+app.get('/feed/stix', (req, res) => {
+  DBSqlite.getAllIocs((err, iocs) => {
+    if (err) return res.status(500).json({ detail: 'STIX export failed' });
+    const bundle = ExportEngine.exportStixBundle({ iocs: iocs || [] });
+    res.setHeader('Content-Type', 'application/json');
+    res.json(bundle);
+  });
+});
+
+app.get('/feed/misp', (req, res) => {
+  DBSqlite.getAllIocs((err, iocs) => {
+    if (err) return res.status(500).json({ detail: 'MISP export failed' });
+    const event = ExportEngine.exportMispEvent({ iocs: iocs || [] });
+    res.setHeader('Content-Type', 'application/json');
+    res.json(event);
+  });
+});
+
+// ── Automated Regulatory Grievance Complaints ───────────────────────────
+app.post('/reports/scores-complaint', (req, res) => {
+  const { noticeId, domain, scamVpa, intermediaryName, violationDetails } = req.body || {};
+  const complaint = ExportEngine.generateSebiScoresNotice({
+    noticeId, domain, scamVpa, intermediaryName, violationDetails
+  });
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(complaint);
+});
+
+app.post('/reports/npci-freeze', (req, res) => {
+  const { noticeId, vpa, scanId, evidenceHash } = req.body || {};
+  const freezeNotice = ExportEngine.generateNpciFreezeNotice({
+    noticeId, vpa, scanId, evidenceHash
+  });
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(freezeNotice);
+});
+
 // Interactive API documentation (Swagger UI)
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+app.use(['/docs', '/api-docs'], swaggerUi.serve, swaggerUi.setup(openApiSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'SentinelSEBI API Docs',
 }));
