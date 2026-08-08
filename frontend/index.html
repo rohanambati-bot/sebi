@@ -60,14 +60,14 @@
   <main class="main-wrapper">
     <header class="topbar">
       <div class="page-heading">
-        <h1 id="view-title">3D Interactive Threat Command Center</h1>
+        <h1 id="view-title">Dashboard Overview</h1>
         <p id="view-desc">Protecting retail investors from AI-driven financial fraud in India's capital markets.</p>
       </div>
 
       <div class="topbar-actions">
         <div class="system-status-pill">
           <div class="status-dot-pulse"></div>
-          <span>Sentinel 3D Engine v2.4</span>
+          <span>Sentinel Engine v2.4 Active</span>
         </div>
         <button class="btn-role-toggle" onclick="ensureAdmin().then(ok => { if(ok) switchTab('reports'); })">
           🔐 Admin Mode
@@ -100,23 +100,6 @@
             <div class="metric-header"><span>ACTIVE ALERTS</span>⚠️</div>
             <div class="metric-value" id="stat-alerts">2</div>
             <div class="metric-subtitle">Live Takedown Notices</div>
-          </div>
-        </div>
-
-        <!-- 3D Interactive WebGL Threat Globe Canvas -->
-        <div class="glass-panel" style="padding: 24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <div>
-              <h3 style="font-family: var(--font-heading); font-size: 17px; color:#fff;">
-                🌐 3D Interactive WebGL Threat Mesh &amp; Correlation Globe
-              </h3>
-              <p style="font-size:12px; color:var(--text-muted);">Click and drag to rotate the 3D threat mesh in 360°. Scroll wheel to zoom in/out.</p>
-            </div>
-            <div class="overlay-3d-hud">3D GRAPH INTERACTIVE MODE</div>
-          </div>
-
-          <div class="container-3d-threat">
-            <canvas id="canvas-3d-threat"></canvas>
           </div>
         </div>
 
@@ -302,7 +285,6 @@
 <div id="system-toast"></div>
 
 <!-- Scripts -->
-<script src="threat_3d.js"></script>
 <script src="app.js"></script>
 <script src="reports.js"></script>
 </body>
