@@ -396,7 +396,7 @@ async function loadReports() {
 let selectedCampaignId = null;
 
 async function loadCampaigns() {
-  const container = document.getElementById('campaign-list-container');
+  const container = document.getElementById('campaign-list-container') || document.getElementById('campaign-list');
   if (!container) return;
 
   try {

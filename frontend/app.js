@@ -260,36 +260,131 @@ function switchTab(tabId) {
 // Switch scan channel inside Scanner
 function switchScanChannel(chan) {
   activeScanChannel = chan;
-  document.querySelectorAll('.channel-tab-btn').forEach(btn => {
-    if (btn.dataset.channel === chan) {
+  document.querySelectorAll('.channel-btn').forEach(btn => {
+    const text = btn.innerText.toLowerCase();
+    if (text.includes(chan) || (chan === 'text' && text.includes('sms')) || (chan === 'image' && text.includes('screenshot'))) {
       btn.classList.add('active');
     } else {
       btn.classList.remove('active');
     }
   });
 
-  document.querySelectorAll('.scan-channel-panel').forEach(panel => {
-    if (panel.id === `scan-chan-${chan}`) {
-      panel.style.display = 'block';
-    } else {
-      panel.style.display = 'none';
-    }
-  });
+  const textCont = document.getElementById('scan-input-text-container');
+  const fileCont = document.getElementById('scan-input-file-container');
 
-  // Hide result box when switching channels
-  document.getElementById('scan-result-box').style.display = 'none';
+  if (chan === 'text') {
+    textCont.style.display = 'block';
+    fileCont.style.display = 'none';
+  } else {
+    textCont.style.display = 'none';
+    fileCont.style.display = 'block';
+    const label = document.getElementById('file-drop-label');
+    if (chan === 'eml') label.innerText = 'Click or Drag & Drop EML Email File';
+    else if (chan === 'image') label.innerText = 'Click or Drag & Drop Screenshot / Image (QR Code quishing support)';
+    else if (chan === 'audio') label.innerText = 'Click or Drag & Drop Audio File (MP3/WAV deepfake check)';
+    else if (chan === 'video') label.innerText = 'Click or Drag & Drop Video File (MP4/AVI forensics)';
+  }
+}
+
+function handleFileSelected(input) {
+  const label = document.getElementById('file-drop-label');
+  if (input.files && input.files[0]) {
+    label.innerText = `Selected File: ${input.files[0].name}`;
+  }
+}
+
+async function runAnalysis() {
+  const scoreEl = document.getElementById('verdict-score');
+  const tierEl = document.getElementById('verdict-tier');
+  const badgeEl = document.getElementById('verdict-badge');
+  const expEl = document.getElementById('verdict-explanation');
+
+  if (activeScanChannel === 'text') {
+    const text = document.getElementById('scan-text-input').value;
+    if (!text.trim()) { showToast("Please paste text to analyze."); return; }
+
+    scoreEl.innerText = '...';
+    expEl.innerText = 'Analyzing text Shannon entropy, typosquatting domains, and SEBI circular contradictions...';
+
+    try {
+      const res = await fetch(`${CONFIG.apiEndpoint}/phishing/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text, channel: 'sms' })
+      });
+      const data = await res.json();
+      const score = data.risk_score || data.risk_fusion?.calibrated_score || 0;
+      scoreEl.innerText = `${score}%`;
+      tierEl.innerText = data.verdict || (score >= 70 ? 'HIGH_RISK_PHISHING' : score >= 30 ? 'MODERATE_RISK' : 'SAFE');
+      
+      if (score >= 70) {
+        badgeEl.className = 'badge-tag badge-danger';
+        badgeEl.innerText = 'HIGH RISK PHISHING';
+      } else if (score >= 30) {
+        badgeEl.className = 'badge-tag badge-suspicious';
+        badgeEl.innerText = 'SUSPICIOUS';
+      } else {
+        badgeEl.className = 'badge-tag badge-safe';
+        badgeEl.innerText = 'SAFE';
+      }
+
+      const flagDetails = (data.flags || []).map(f => `• ${f.detail}`).join('<br>') || 'No scam indicators detected.';
+      expEl.innerHTML = flagDetails;
+    } catch (e) {
+      scoreEl.innerText = 'ERR';
+      expEl.innerText = 'Analysis connection failed.';
+    }
+  } else {
+    const fileEl = document.getElementById('scan-file-input');
+    const file = fileEl.files[0];
+    if (!file) { showToast("Please select a file to analyze."); return; }
+
+    scoreEl.innerText = '...';
+    expEl.innerText = `Analyzing file artifact (${file.name})...`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    let endpoint = '/forensics/media';
+    if (activeScanChannel === 'eml') endpoint = '/eml/analyze';
+    else if (activeScanChannel === 'image') endpoint = '/media/scan-qr';
+    else if (activeScanChannel === 'audio') endpoint = '/forensics/audio';
+    else if (activeScanChannel === 'video') endpoint = '/forensics/video';
+
+    try {
+      const res = await fetch(`${CONFIG.apiEndpoint}${endpoint}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      const score = data.riskScore || data.risk_score || data.risk_fusion?.calibrated_score || 0;
+      scoreEl.innerText = `${score}%`;
+      tierEl.innerText = data.verdict || (score >= 70 ? 'HIGH_RISK' : 'SAFE');
+
+      if (score >= 70) {
+        badgeEl.className = 'badge-tag badge-danger';
+        badgeEl.innerText = 'HIGH RISK ARTIFACT';
+      } else {
+        badgeEl.className = 'badge-tag badge-safe';
+        badgeEl.innerText = 'SAFE / AUDITED';
+      }
+
+      const flagDetails = (data.flags || []).map(f => `• ${f.detail || f.description || f.type}`).join('<br>') || 'Artifact audited cleanly.';
+      expEl.innerHTML = flagDetails;
+    } catch (e) {
+      scoreEl.innerText = 'ERR';
+      expEl.innerText = 'File analysis failed.';
+    }
+  }
 }
 
 // Load samples helper
-function loadTextSample(isPhishing) {
+function loadTextSample(isPhishing = true) {
   const textEl = document.getElementById('scan-text-input');
-  const senderEl = document.getElementById('scan-text-sender');
   if (isPhishing) {
     textEl.value = "Dear Customer, SEBI URGENT NOTICE: Your trading account will be suspended within 24 hours. Verify immediately by clicking http://sebi-goviin.com/verify and enter your OTP and UPI PIN. Guaranteed returns on our exclusive pre-IPO shares, join our telegram now!";
-    senderEl.value = "alerts@sebi-goviin.com";
   } else {
     textEl.value = "Hi, your Zerodha contract note for June 2026 is now available in the console under Reports. Please inspect. No action needed.";
-    senderEl.value = "noreply@zerodha.com";
   }
 }
 
