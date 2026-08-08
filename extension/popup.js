@@ -199,13 +199,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         body: JSON.stringify({ code })
       });
       const data = await res.json();
-      if (res.ok && data.status === 'VERIFIED') {
+      const isVerified = res.ok && (data.status === 'CRYPTOGRAPHICALLY VERIFIED' || data.status === 'VERIFIED' || data.verdict_label === 'LOW_RISK');
+      const isSimilar = data.status === 'SIMILAR TO REGISTERED COMMUNICATION';
+
+      if (isVerified) {
         resultBox.style.color = 'var(--success)';
         resultBox.innerHTML = `
-          <div style="font-weight:700; color:var(--success); margin-bottom:4px;">✅ VERIFIED AUTHENTIC COMMUNICATION</div>
+          <div style="font-weight:700; color:var(--success); margin-bottom:4px;">✅ CRYPTOGRAPHICALLY VERIFIED</div>
           <div><b>Issuer:</b> ${escapeHtml(data.issuer || data.issuerName || 'Registered SEBI Intermediary')}</div>
-          <div><b>Status:</b> RSA-2048 PKI Signature Valid</div>
-          <div><b>Registered:</b> ${escapeHtml(data.created_at || 'Authentic Record')}</div>
+          <div><b>Domain:</b> ${escapeHtml(data.source_domain || 'sebi.gov.in')}</div>
+          <div><b>Status:</b> RSA-2048 Digital Signature Valid</div>
+        `;
+      } else if (isSimilar) {
+        resultBox.style.color = 'var(--gold)';
+        resultBox.innerHTML = `
+          <div style="font-weight:700; color:var(--gold); margin-bottom:4px;">🟡 SIMILAR TO REGISTERED COMMUNICATION</div>
+          <div><b>Issuer:</b> ${escapeHtml(data.issuer || 'Registered Intermediary')}</div>
+          <div><b>Domain:</b> ${escapeHtml(data.source_domain || 'sebi.gov.in')}</div>
+          <div><b>Note:</b> Copy-pasted/forwarded text matches registered circular with minor edits.</div>
         `;
       } else {
         resultBox.style.color = 'var(--danger)';

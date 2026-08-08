@@ -94,7 +94,8 @@ async function verifyByCode() {
     const data = await res.json();
     
     labelEl.innerText = data.status;
-    barEl.className = `verdict-header verd-${data.verdict_label.toLowerCase()}`;
+    const verdictClass = data.verdict_label ? data.verdict_label.toLowerCase() : (data.status.includes('CRYPTOGRAPHICALLY') ? 'low_risk' : data.status.includes('SIMILAR') ? 'moderate_risk' : 'high_risk');
+    barEl.className = `verdict-header verd-${verdictClass}`;
     msgEl.innerText = data.message;
     badgeEl.innerText = `ISSUER: ${data.issuer || 'UNKNOWN'} | DOMAIN: ${data.source_domain || 'UNKNOWN'}`;
 
@@ -125,9 +126,10 @@ async function verifyByContent() {
     const data = await res.json();
     
     labelEl.innerText = data.status;
-    barEl.className = `verdict-header verd-${data.verdict_label.toLowerCase()}`;
-    msgEl.innerText = data.message;
-    badgeEl.innerText = `REGISTRY FUZZY COMPARISON | SIMILARITY: ${data.similarity ? (data.similarity*100).toFixed(0)+'%' : 'N/A'}`;
+    const fuzzyClass = data.status === 'CRYPTOGRAPHICALLY VERIFIED' ? 'low_risk' : (data.status === 'SIMILAR TO REGISTERED COMMUNICATION' ? 'moderate_risk' : 'high_risk');
+    barEl.className = `verdict-header verd-${fuzzyClass}`;
+    msgEl.innerText = data.message || `Fuzzy matching result: ${data.status}`;
+    badgeEl.innerText = `REGISTRY FUZZY COMPARISON | SIMILARITY: ${data.similarityScore ? (data.similarityScore*100).toFixed(0)+'%' : (data.similarity ? (data.similarity*100).toFixed(0)+'%' : 'N/A')}`;
 
   } catch (e) {
     msgEl.innerText = "Registry query failed.";
