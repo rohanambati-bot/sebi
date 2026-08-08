@@ -1736,13 +1736,14 @@ process.on('unhandledRejection', (reason) => {
 
 // Start Server
 function startServer(port) {
-  const server = app.listen(port, () => {
+  const host = process.env.HOST || '0.0.0.0';
+  const server = app.listen(port, host, () => {
     console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║     SentinelSEBI — Unified Hardened Express Server       ║
 ║                                                          ║
-║  Backend API: http://127.0.0.1:${port}                   ║
-║  Web Console: http://127.0.0.1:${port}                   ║
+║  Backend API: http://${host}:${port}                   ║
+║  Web Console: http://${host}:${port}                   ║
 ║  Database:    SQLite (sentinel.db)                       ║
 ╚══════════════════════════════════════════════════════════╝
     `);
