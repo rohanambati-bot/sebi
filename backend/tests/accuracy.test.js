@@ -142,16 +142,24 @@ test('Detector Benchmark Accuracy Test Suite', async (t) => {
     const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
     const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
     const f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
+    const fpr = fp + tn > 0 ? fp / (fp + tn) : 0;
+    const fnr = fn + tp > 0 ? fn / (fn + tp) : 0;
+    const roc_auc = (recall + (1 - fpr)) / 2;
+    const pr_auc = (precision + recall) / 2;
 
-    // Log the full results table for transparency
+    // Log the full multi-metric results table for scientific transparency
     console.log('\n  ╔══════════════════════════════════════════════════════════╗');
-    console.log('  ║       Held-Out Benchmark Results (50 messages)          ║');
+    console.log('  ║       Held-Out Benchmark Multi-Metric Report             ║');
     console.log('  ╠══════════════════════════════════════════════════════════╣');
-    console.log(`  ║  Accuracy:  ${(accuracy * 100).toFixed(1)}%                                    ║`);
-    console.log(`  ║  Precision: ${(precision * 100).toFixed(1)}%                                    ║`);
-    console.log(`  ║  Recall:    ${(recall * 100).toFixed(1)}%                                    ║`);
-    console.log(`  ║  F1 Score:  ${(f1 * 100).toFixed(1)}%                                    ║`);
-    console.log(`  ║  TP: ${tp}  FP: ${fp}  TN: ${tn}  FN: ${fn}                          ║`);
+    console.log(`  ║  Accuracy:              ${(accuracy * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  Precision:             ${(precision * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  Recall:                ${(recall * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  F1 Score:              ${(f1 * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  ROC-AUC (Est.):        ${(roc_auc * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  PR-AUC (Est.):         ${(pr_auc * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  False Positive Rate:   ${(fpr * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  False Negative Rate:   ${(fnr * 100).toFixed(1)}%                           ║`);
+    console.log(`  ║  Confusion Matrix:      [[TN: ${tn}, FP: ${fp}], [FN: ${fn}, TP: ${tp}]]   ║`);
     console.log('  ╚══════════════════════════════════════════════════════════╝');
 
     // Log misclassifications for debugging

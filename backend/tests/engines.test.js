@@ -55,10 +55,10 @@ test('100% Dynamic Algorithmic Engine Verification Suite', async (t) => {
     assert.ok(reg.signature, 'RSA-2048 Digital Signature generated');
 
     const codeResult = verifyEngine.verifyByCode(reg.code);
-    assert.strictEqual(codeResult.status, 'VERIFIED');
+    assert.strictEqual(codeResult.status, 'CRYPTOGRAPHICALLY VERIFIED');
     assert.strictEqual(codeResult.signatureValid, true, 'RSA-2048 signature verified mathematically');
 
     const fuzzyResult = verifyEngine.checkTextFuzzy('Official Settlement Notice.');
-    assert.ok(fuzzyResult.status.includes('AUTHENTIC'));
+    assert.strictEqual(fuzzyResult.status, 'SIMILAR TO REGISTERED COMMUNICATION');
   });
 });

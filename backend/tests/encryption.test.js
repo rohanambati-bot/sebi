@@ -16,6 +16,6 @@ Password: DOB1990`;
 
     assert.strictEqual(parsed.encryptionStatus.isEncryptedPayload, true, 'Flagged as encrypted payload');
     assert.strictEqual(parsed.encryptionStatus.isSmimeEncrypted, true, 'S/MIME header detected');
-    assert.strictEqual(parsed.encryptionStatus.extractedPassword, 'DOB1990', 'Extracted embedded password');
+    assert.strictEqual(parsed.encryptionStatus.credentialArtifactDetected, true, 'Credential artifact flagged without cleartext exposure');
   });
 });

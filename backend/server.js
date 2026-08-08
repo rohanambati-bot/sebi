@@ -373,8 +373,8 @@ app.post('/phishing/upload-eml', mediaLimiter, upload.single('file'), async (req
     analysis.verdict = 'HIGH_RISK_ENCRYPTED_PAYLOAD';
 
     let detailMsg = 'Email contains an encrypted/password-protected payload (S/MIME / PGP).';
-    if (parsedEml.encryptionStatus.extractedPassword) {
-      detailMsg += ` Dynamic Heuristic extracted embedded password: "${parsedEml.encryptionStatus.extractedPassword}".`;
+    if (parsedEml.encryptionStatus.credentialArtifactDetected || parsedEml.encryptionStatus.extractedPassword) {
+      detailMsg += ` Dynamic Heuristic: Credential artifact detected in message body.`;
     }
 
     analysis.flags.push({
@@ -470,6 +470,49 @@ function parseInputBuffer(req, bodyKey) {
   return null;
 }
 
+/**
+ * P0 Upload Security: Validate binary magic bytes and header structure
+ * to prevent disguised files (e.g. fake.jpg carrying ZIP/EXE payloads).
+ */
+function validateUploadedContent(buffer, expectedKind, fileName = '') {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+    return { valid: false, reason: 'Empty or missing binary buffer.' };
+  }
+
+  const ext = path.extname(fileName).toLowerCase();
+
+  if (expectedKind === 'image') {
+    const isJpeg = buffer.length > 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+    const isPng = buffer.length > 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+    const isGif = buffer.length > 3 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+    const isBmp = buffer.length > 2 && buffer[0] === 0x42 && buffer[1] === 0x4D;
+    const isWebp = buffer.length > 12 && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+
+    if (!isJpeg && !isPng && !isGif && !isBmp && !isWebp) {
+      return { valid: false, reason: `Binary magic bytes mismatch for image upload (${ext || 'unknown'}). Header does not match JPEG, PNG, GIF, BMP, or WebP.` };
+    }
+  } else if (expectedKind === 'audio') {
+    const isRiffWav = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE';
+    const isMp3 = buffer.length > 3 && ((buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) || (buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0));
+    const isOgg = buffer.length > 4 && buffer.subarray(0, 4).toString('ascii') === 'OggS';
+    const isFlac = buffer.length > 4 && buffer.subarray(0, 4).toString('ascii') === 'fLaC';
+
+    if (!isRiffWav && !isMp3 && !isOgg && !isFlac) {
+      return { valid: false, reason: `Binary magic bytes mismatch for audio upload (${ext || 'unknown'}). Header does not match WAV, MP3, OGG, or FLAC.` };
+    }
+  } else if (expectedKind === 'video') {
+    const isFtyp = buffer.length > 8 && buffer.subarray(4, 8).toString('ascii') === 'ftyp';
+    const isRiffAvi = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'AVI ';
+    const isMatroska = buffer.length > 4 && buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3;
+
+    if (!isFtyp && !isRiffAvi && !isMatroska) {
+      return { valid: false, reason: `Binary magic bytes mismatch for video upload (${ext || 'unknown'}). Header does not match MP4, AVI, or MKV container.` };
+    }
+  }
+
+  return { valid: true };
+}
+
 // 3. MEDIA FORENSICS (IMAGE, AUDIO, VIDEO)
 app.post('/media/analyze-image', mediaLimiter, upload.single('file'), async (req, res) => {
   const imageInput = parseInputBuffer(req, 'image');
@@ -477,6 +520,12 @@ app.post('/media/analyze-image', mediaLimiter, upload.single('file'), async (req
     return res.status(400).json({ detail: 'No valid image file or binary payload provided' });
   }
   const fileName = req.file ? req.file.originalname : 'uploaded_image.jpg';
+
+  const valCheck = validateUploadedContent(imageInput, 'image', fileName);
+  if (!valCheck.valid) {
+    return res.status(400).json({ detail: valCheck.reason });
+  }
+
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'image/jpeg', fileName);
 
   // Try Python ML (OpenCV + MediaPipe + exifread), fall back to JS DQT
@@ -547,6 +596,12 @@ app.post('/media/analyze-audio', mediaLimiter, upload.single('file'), async (req
     return res.status(400).json({ detail: 'No valid audio file or binary payload provided' });
   }
   const fileName = req.file ? req.file.originalname : 'uploaded_audio.wav';
+
+  const valCheck = validateUploadedContent(audioInput, 'audio', fileName);
+  if (!valCheck.valid) {
+    return res.status(400).json({ detail: valCheck.reason });
+  }
+
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'audio/wav', fileName);
 
   // Try Python ML (librosa + resemblyzer), fall back to JS FFT
@@ -613,6 +668,12 @@ app.post('/media/analyze-video', mediaLimiter, upload.single('file'), async (req
     return res.status(400).json({ detail: 'No valid video file or binary payload provided' });
   }
   const fileName = req.file ? req.file.originalname : 'uploaded_video.mp4';
+
+  const valCheck = validateUploadedContent(videoInput, 'video', fileName);
+  if (!valCheck.valid) {
+    return res.status(400).json({ detail: valCheck.reason });
+  }
+
   const retained = retainUploadEvidence(req, req.file?.mimetype || 'video/mp4', fileName);
 
   // Try Python ML (OpenCV + MediaPipe temporal face mesh), fall back to JS MP4 parser
@@ -671,17 +732,18 @@ app.get('/media/preview/:filename', (req, res) => {
 // market intermediary, so it is admin-only. Read/verify paths stay public —
 // investors must be able to check a code without an account.
 app.post('/verify/register', requireRole('admin'), (req, res) => {
-  const { issuerId, issuerName, content } = req.body || {};
+  const { issuerId, issuerName, sourceDomain, source_domain, content } = req.body || {};
   const record = verifyEngine.registerCommunication({
     issuerId: sanitizeText(issuerId),
     issuerName: sanitizeText(issuerName),
+    sourceDomain: sanitizeText(sourceDomain || source_domain),
     content: sanitizeText(content),
   });
 
   DBSqlite.addRegisteredComm({ ...record, user_id: req.user.id }, () => {
     audit(req, 'VERIFY_REGISTER', {
       targetType: 'registered_communication', targetId: record.code,
-      metadata: { issuerId: record.issuerId, issuerName: record.issuerName, contentHash: record.contentHash },
+      metadata: { issuerId: record.issuerId, issuerName: record.issuerName, sourceDomain: record.sourceDomain, contentHash: record.contentHash },
     });
     res.json({
       success: true,
@@ -689,7 +751,7 @@ app.post('/verify/register', requireRole('admin'), (req, res) => {
       content_hash: record.contentHash,
       signature: record.signature,
       public_key: record.publicKeyPem,
-      source_domain: 'sebi.gov.in',
+      source_domain: record.sourceDomain || 'sebi.gov.in',
       record,
     });
   });
@@ -698,23 +760,25 @@ app.post('/verify/register', requireRole('admin'), (req, res) => {
 app.post('/verify/by-code', (req, res) => {
   const code = req.body.code || req.query.code;
   const result = verifyEngine.verifyByCode(code);
+  const isVerified = result.status === 'CRYPTOGRAPHICALLY VERIFIED' || result.status === 'VERIFIED';
   res.json({
     status: result.status,
-    verdict_label: result.status === 'VERIFIED' ? 'LOW_RISK' : 'HIGH_RISK',
-    message: result.message || (result.status === 'VERIFIED' ? 'Cryptographic RSA-2048 PKI Signature Verified.' : 'Unverified Code.'),
+    verdict_label: isVerified ? 'LOW_RISK' : 'HIGH_RISK',
+    message: result.message || (isVerified ? 'Cryptographic RSA-2048 PKI Signature Verified.' : 'Unverified Code.'),
     issuer: result.record ? result.record.issuerName : 'UNKNOWN',
-    source_domain: result.record ? 'sebi.gov.in' : 'UNKNOWN',
+    source_domain: result.record ? (result.record.sourceDomain || 'sebi.gov.in') : 'UNKNOWN',
   });
 });
 
 app.get('/verify/by-code/:code', (req, res) => {
   const result = verifyEngine.verifyByCode(req.params.code);
+  const isVerified = result.status === 'CRYPTOGRAPHICALLY VERIFIED' || result.status === 'VERIFIED';
   res.json({
     status: result.status,
-    verdict_label: result.status === 'VERIFIED' ? 'LOW_RISK' : 'HIGH_RISK',
+    verdict_label: isVerified ? 'LOW_RISK' : 'HIGH_RISK',
     message: result.message || 'Verification complete.',
     issuer: result.record ? result.record.issuerName : 'UNKNOWN',
-    source_domain: 'sebi.gov.in',
+    source_domain: result.record ? (result.record.sourceDomain || 'sebi.gov.in') : 'UNKNOWN',
   });
 });
 

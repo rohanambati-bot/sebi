@@ -37,12 +37,14 @@ class VerifyEngine {
     this.registerCommunication({
       issuerId: 'SEBI-OFFICIAL-ROOT',
       issuerName: 'Securities and Exchange Board of India',
+      sourceDomain: 'sebi.gov.in',
       content: 'SEBI Circular: Beware of fraudulent stock tip groups promising guaranteed returns.',
     });
 
     this.registerCommunication({
       issuerId: 'ZERODHA-BROKING',
       issuerName: 'Zerodha Broking Limited',
+      sourceDomain: 'zerodha.com',
       content: 'Quarterly Demat Settlement Notice for Active Investors.',
     });
   }
@@ -50,7 +52,7 @@ class VerifyEngine {
   /**
    * Register official communication with RSA-2048 keypair generation.
    */
-  registerCommunication({ issuerId, issuerName, content }) {
+  registerCommunication({ issuerId, issuerName, sourceDomain, content }) {
     const code = `VERIFY-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const contentHash = crypto.createHash('sha256').update(content || '').digest('hex');
 
@@ -64,10 +66,13 @@ class VerifyEngine {
     signer.update(contentHash);
     const signature = signer.sign(privateKey, 'base64');
 
+    const domain = sourceDomain || ((issuerName || '').toLowerCase().includes('zerodha') ? 'zerodha.com' : 'sebi.gov.in');
+
     const record = {
       code,
       issuerId: issuerId || 'SEBI-REGISTERED-ISSUER',
       issuerName: issuerName || 'Registered Market Intermediary',
+      sourceDomain: domain,
       content,
       contentHash,
       signature,
@@ -94,7 +99,7 @@ class VerifyEngine {
     const isValid = verifier.verify(match.publicKeyPem, match.signature, 'base64');
 
     return {
-      status: isValid ? 'VERIFIED' : 'TAMPERED',
+      status: isValid ? 'CRYPTOGRAPHICALLY VERIFIED' : 'TAMPERED',
       signatureValid: isValid,
       record: match,
     };
@@ -109,14 +114,14 @@ class VerifyEngine {
 
     for (const record of this.registeredMessages) {
       if (record.content.trim() === input) {
-        return { status: 'AUTHENTIC', matchType: 'EXACT_MATCH', record };
+        return { status: 'CRYPTOGRAPHICALLY VERIFIED', matchType: 'EXACT_MATCH', record };
       }
 
       // Fuzzy matching for copy-pasted forwarded text
       const similarity = this.calculateSimilarity(input, record.content);
       if (similarity > 0.85) {
         return {
-          status: 'AUTHENTIC_MINOR_EDIT',
+          status: 'SIMILAR TO REGISTERED COMMUNICATION',
           matchType: 'FUZZY_MATCH',
           similarityScore: parseFloat(similarity.toFixed(2)),
           record,
