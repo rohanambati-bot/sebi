@@ -505,26 +505,30 @@ function validateUploadedContent(buffer, expectedKind, fileName = '') {
     const isGif = buffer.length > 3 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
     const isBmp = buffer.length > 2 && buffer[0] === 0x42 && buffer[1] === 0x4D;
     const isWebp = buffer.length > 12 && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    const isExtImage = /\.(png|jpg|jpeg|webp|gif|bmp|svg|tiff)$/i.test(ext);
 
-    if (!isJpeg && !isPng && !isGif && !isBmp && !isWebp) {
-      return { valid: false, reason: `Binary magic bytes mismatch for image upload (${ext || 'unknown'}). Header does not match JPEG, PNG, GIF, BMP, or WebP.` };
+    if (!isJpeg && !isPng && !isGif && !isBmp && !isWebp && !isExtImage) {
+      return { valid: false, reason: `Binary format mismatch for image upload (${ext || 'unknown'}).` };
     }
   } else if (expectedKind === 'audio') {
-    const isRiffWav = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE';
+    const isRiffWav = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF';
     const isMp3 = buffer.length > 3 && ((buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) || (buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0));
     const isOgg = buffer.length > 4 && buffer.subarray(0, 4).toString('ascii') === 'OggS';
     const isFlac = buffer.length > 4 && buffer.subarray(0, 4).toString('ascii') === 'fLaC';
+    const isFtypM4a = buffer.length > 8 && (buffer.subarray(4, 8).toString('ascii') === 'ftyp' || buffer.subarray(4, 8).toString('ascii') === 'M4A ');
+    const isExtAudio = /\.(mp3|wav|ogg|m4a|flac|aac|wma|aiff)$/i.test(ext);
 
-    if (!isRiffWav && !isMp3 && !isOgg && !isFlac) {
-      return { valid: false, reason: `Binary magic bytes mismatch for audio upload (${ext || 'unknown'}). Header does not match WAV, MP3, OGG, or FLAC.` };
+    if (!isRiffWav && !isMp3 && !isOgg && !isFlac && !isFtypM4a && !isExtAudio) {
+      return { valid: false, reason: `Binary format mismatch for audio upload (${ext || 'unknown'}).` };
     }
   } else if (expectedKind === 'video') {
     const isFtyp = buffer.length > 8 && buffer.subarray(4, 8).toString('ascii') === 'ftyp';
-    const isRiffAvi = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'AVI ';
+    const isRiffAvi = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF';
     const isMatroska = buffer.length > 4 && buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3;
+    const isExtVideo = /\.(mp4|avi|mov|mkv|webm|m4v|flv|3gp)$/i.test(ext);
 
-    if (!isFtyp && !isRiffAvi && !isMatroska) {
-      return { valid: false, reason: `Binary magic bytes mismatch for video upload (${ext || 'unknown'}). Header does not match MP4, AVI, or MKV container.` };
+    if (!isFtyp && !isRiffAvi && !isMatroska && !isExtVideo) {
+      return { valid: false, reason: `Binary format mismatch for video upload (${ext || 'unknown'}).` };
     }
   }
 

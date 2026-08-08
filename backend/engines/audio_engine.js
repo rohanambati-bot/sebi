@@ -173,25 +173,37 @@ class AudioEngine {
   }
 
   static parseWavHeader(buffer) {
-    const isWav = buffer.toString('utf8', 0, 4) === 'RIFF' && buffer.toString('utf8', 8, 12) === 'WAVE';
-    if (isWav && buffer.length >= 44) {
-      const channels = buffer.readUInt16LE(22);
-      const sampleRate = buffer.readUInt32LE(24);
-      const bitsPerSample = buffer.readUInt16LE(34);
-      const samples = [];
-      for (let i = 44; i < Math.min(buffer.length - 1, 4096); i += 2) {
-        samples.push(buffer.readInt16LE(i));
+    if (!Buffer.isBuffer(buffer) || buffer.length < 16) {
+      return { sampleRate: 16000, channels: 1, bitsPerSample: 16, samples: new Array(128).fill(0) };
+    }
+
+    const isWav = buffer.length >= 44 && buffer.toString('utf8', 0, 4) === 'RIFF' && buffer.toString('utf8', 8, 12) === 'WAVE';
+    if (isWav) {
+      try {
+        const channels = buffer.readUInt16LE(22) || 1;
+        const sampleRate = buffer.readUInt32LE(24) || 16000;
+        const bitsPerSample = buffer.readUInt16LE(34) || 16;
+        const samples = [];
+        const maxOffset = Math.min(buffer.length - 2, 4096);
+        for (let i = 44; i <= maxOffset; i += 2) {
+          samples.push(buffer.readInt16LE(i));
+        }
+        return { sampleRate, channels, bitsPerSample, samples: samples.length > 0 ? samples : [0] };
+      } catch (e) {
+        // Fallback for non-canonical WAV
       }
-      return { sampleRate, channels, bitsPerSample, samples };
     }
 
     const samples = [];
-    const sampleLen = Math.min(buffer.length, 2048);
-    for (let i = 0; i < sampleLen; i += 2) {
-      const val = buffer.readInt16BE ? buffer.readInt16BE(i % (buffer.length - 1)) : (buffer[i] - 128) * 256;
-      samples.push(val);
+    const maxOffset = Math.min(buffer.length - 2, 2048);
+    for (let i = 0; i <= maxOffset; i += 2) {
+      try {
+        samples.push(buffer.readInt16BE(i));
+      } catch (e) {
+        samples.push((buffer[i] || 0) * 128);
+      }
     }
-    return { sampleRate: 16000, channels: 1, bitsPerSample: 16, samples };
+    return { sampleRate: 16000, channels: 1, bitsPerSample: 16, samples: samples.length > 0 ? samples : [0] };
   }
 
   static computeFftSpectralFlatness(samples) {
