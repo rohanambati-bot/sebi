@@ -154,7 +154,7 @@ class MediaEngine {
    */
   static detectQrPayload(buffer) {
     if (!buffer || buffer.length === 0) return { detected: false, payloads: [] };
-    const raw = buffer.toString('utf8', 0, Math.min(buffer.length, 65536));
+    const raw = buffer.toString('latin1', 0, Math.min(buffer.length, 65536));
     const urlRegex = /(https?:\/\/[^\s"'<>]+|upi:\/\/pay\?[^\s"'<>]+|[a-zA-Z0-9._-]+@(oksbi|okaxis|okicici|paytm|ybl))/gi;
     const matches = raw.match(urlRegex) || [];
     const unique = [...new Set(matches)];

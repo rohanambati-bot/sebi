@@ -149,7 +149,7 @@ class VideoEngine {
     const foundAtoms = [];
 
     for (let i = 0; i < buffer.length - 8; i++) {
-      const atomName = buffer.toString('utf8', i + 4, i + 8);
+      const atomName = buffer.toString('latin1', i + 4, i + 8);
       if (knownAtoms.includes(atomName) && !foundAtoms.includes(atomName)) {
         foundAtoms.push(atomName);
       }
