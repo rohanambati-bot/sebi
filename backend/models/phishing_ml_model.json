@@ -1,7 +1,7 @@
 {
   "model_version": "1.0.0",
   "model_type": "multinomial_naive_bayes_tfidf",
-  "trained_at": "2026-08-08T15:35:28.863Z",
+  "trained_at": "2026-08-08T16:01:58.759Z",
   "dataset_version": "phishing-v1",
   "feature_schema": "word_char_1_2_3_grams_tfidf",
   "training_samples": 18,

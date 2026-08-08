@@ -1,42 +1,62 @@
 [
   {
     "id": "media_manip_01",
+    "source_group": "Group_Photoshop_Edits",
     "label": "manipulated",
-    "campaign": "Image_Campaign_1",
     "features": {
-      "ela_variance": 48.5,
-      "dqt_quant_error": 18.2,
-      "metadata_anomaly_score": 0.85
+      "ela_variance": 32.4,
+      "dqt_quant_error": 9.5,
+      "metadata_anomaly_score": 0.95
     }
   },
   {
     "id": "media_manip_02",
+    "source_group": "Group_Photoshop_Edits",
     "label": "manipulated",
-    "campaign": "Image_Campaign_1",
     "features": {
-      "ela_variance": 52.1,
-      "dqt_quant_error": 21.4,
+      "ela_variance": 29.8,
+      "dqt_quant_error": 8.8,
       "metadata_anomaly_score": 0.90
     }
   },
   {
-    "id": "media_authentic_01",
-    "label": "authentic",
-    "campaign": "Image_Authentic_1",
+    "id": "media_manip_03",
+    "source_group": "Group_Midjourney_Synthetic",
+    "label": "manipulated",
     "features": {
-      "ela_variance": 8.2,
-      "dqt_quant_error": 2.1,
-      "metadata_anomaly_score": 0.05
+      "ela_variance": 35.1,
+      "dqt_quant_error": 11.2,
+      "metadata_anomaly_score": 0.98
     }
   },
   {
-    "id": "media_authentic_02",
+    "id": "media_auth_01",
+    "source_group": "Group_Camera_Raw",
     "label": "authentic",
-    "campaign": "Image_Authentic_1",
     "features": {
-      "ela_variance": 9.4,
-      "dqt_quant_error": 2.5,
-      "metadata_anomaly_score": 0.10
+      "ela_variance": 1.5,
+      "dqt_quant_error": 0.5,
+      "metadata_anomaly_score": 0.02
+    }
+  },
+  {
+    "id": "media_auth_02",
+    "source_group": "Group_Camera_Raw",
+    "label": "authentic",
+    "features": {
+      "ela_variance": 1.8,
+      "dqt_quant_error": 0.6,
+      "metadata_anomaly_score": 0.04
+    }
+  },
+  {
+    "id": "media_auth_03",
+    "source_group": "Group_Unmodified_Broker_PDF",
+    "label": "authentic",
+    "features": {
+      "ela_variance": 2.1,
+      "dqt_quant_error": 0.8,
+      "metadata_anomaly_score": 0.05
     }
   }
 ]
