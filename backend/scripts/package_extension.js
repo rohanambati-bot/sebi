@@ -1,8 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
 
-// Lightweight zip file creator using Store/Deflate method for Chrome Extension files
 function createZipFile(sourceDir, outPath) {
   const files = fs.readdirSync(sourceDir);
   const zipEntries = [];
@@ -15,7 +13,6 @@ function createZipFile(sourceDir, outPath) {
     }
   });
 
-  // Build zip structure using minimal ZIP format headers
   const localHeaderBuffers = [];
   const cdHeaderBuffers = [];
   let currentOffset = 0;
@@ -26,43 +23,41 @@ function createZipFile(sourceDir, outPath) {
     const crc32 = crc32Checksum(contentBuf);
     const size = contentBuf.length;
 
-    // Local file header (30 bytes + name length + content length)
     const localHeader = Buffer.alloc(30 + nameBuf.length);
-    localHeader.writeUInt32LE(0x04034b50, 0); // Local header signature
-    localHeader.writeUInt16LE(20, 4);         // Version needed
-    localHeader.writeUInt16LE(0, 6);          // General flag
-    localHeader.writeUInt16LE(0, 8);          // Compression method (0 = store)
-    localHeader.writeUInt16LE(0, 10);         // Last mod time
-    localHeader.writeUInt16LE(0, 12);         // Last mod date
-    localHeader.writeUInt32LE(crc32, 14);     // CRC-32
-    localHeader.writeUInt32LE(size, 18);      // Compressed size
-    localHeader.writeUInt32LE(size, 22);      // Uncompressed size
-    localHeader.writeUInt16LE(nameBuf.length, 26); // File name length
-    localHeader.writeUInt16LE(0, 28);         // Extra field length
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(0, 12);
+    localHeader.writeUInt32LE(crc32, 14);
+    localHeader.writeUInt32LE(size, 18);
+    localHeader.writeUInt32LE(size, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
     nameBuf.copy(localHeader, 30);
 
     localHeaderBuffers.push(localHeader);
     localHeaderBuffers.push(contentBuf);
 
-    // Central directory header (46 bytes + name length)
     const cdHeader = Buffer.alloc(46 + nameBuf.length);
-    cdHeader.writeUInt32LE(0x02014b50, 0); // CD header signature
-    cdHeader.writeUInt16LE(20, 4);         // Version made by
-    cdHeader.writeUInt16LE(20, 6);         // Version needed
-    cdHeader.writeUInt16LE(0, 8);          // General flag
-    cdHeader.writeUInt16LE(0, 10);         // Compression method (0 = store)
-    cdHeader.writeUInt16LE(0, 12);         // Last mod time
-    cdHeader.writeUInt16LE(0, 14);         // Last mod date
-    cdHeader.writeUInt32LE(crc32, 16);     // CRC-32
-    cdHeader.writeUInt32LE(size, 20);      // Compressed size
-    cdHeader.writeUInt32LE(size, 24);      // Uncompressed size
-    cdHeader.writeUInt16LE(nameBuf.length, 28); // File name length
-    cdHeader.writeUInt16LE(0, 30);         // Extra field length
-    cdHeader.writeUInt16LE(0, 32);         // Comment length
-    cdHeader.writeUInt16LE(0, 34);         // Disk start
-    cdHeader.writeUInt16LE(0, 36);         // Internal attributes
-    cdHeader.writeUInt32LE(0, 38);         // External attributes
-    cdHeader.writeUInt32LE(currentOffset, 42); // Local header offset
+    cdHeader.writeUInt32LE(0x02014b50, 0);
+    cdHeader.writeUInt16LE(20, 4);
+    cdHeader.writeUInt16LE(20, 6);
+    cdHeader.writeUInt16LE(0, 8);
+    cdHeader.writeUInt16LE(0, 10);
+    cdHeader.writeUInt16LE(0, 12);
+    cdHeader.writeUInt16LE(0, 14);
+    cdHeader.writeUInt32LE(crc32, 16);
+    cdHeader.writeUInt32LE(size, 20);
+    cdHeader.writeUInt32LE(size, 24);
+    cdHeader.writeUInt16LE(nameBuf.length, 28);
+    cdHeader.writeUInt16LE(0, 30);
+    cdHeader.writeUInt16LE(0, 32);
+    cdHeader.writeUInt16LE(0, 34);
+    cdHeader.writeUInt16LE(0, 36);
+    cdHeader.writeUInt32LE(0, 38);
+    cdHeader.writeUInt32LE(currentOffset, 42);
     nameBuf.copy(cdHeader, 46);
 
     cdHeaderBuffers.push(cdHeader);
@@ -73,20 +68,19 @@ function createZipFile(sourceDir, outPath) {
   let cdSize = 0;
   cdHeaderBuffers.forEach(buf => { cdSize += buf.length; });
 
-  // End of Central Directory Header (22 bytes)
   const eocdHeader = Buffer.alloc(22);
-  eocdHeader.writeUInt32LE(0x06054b50, 0); // EOCD signature
-  eocdHeader.writeUInt16LE(0, 4);          // Disk number
-  eocdHeader.writeUInt16LE(0, 6);          // Disk with CD
-  eocdHeader.writeUInt16LE(zipEntries.length, 8);  // CD entries on disk
-  eocdHeader.writeUInt16LE(zipEntries.length, 10); // Total CD entries
-  eocdHeader.writeUInt32LE(cdSize, 12);    // CD size
-  eocdHeader.writeUInt32LE(cdOffset, 16);  // CD offset
-  eocdHeader.writeUInt16LE(0, 20);         // Comment length
+  eocdHeader.writeUInt32LE(0x06054b50, 0);
+  eocdHeader.writeUInt16LE(0, 4);
+  eocdHeader.writeUInt16LE(0, 6);
+  eocdHeader.writeUInt16LE(zipEntries.length, 8);
+  eocdHeader.writeUInt16LE(zipEntries.length, 10);
+  eocdHeader.writeUInt32LE(cdSize, 12);
+  eocdHeader.writeUInt32LE(cdOffset, 16);
+  eocdHeader.writeUInt16LE(0, 20);
 
   const finalZipBuffer = Buffer.concat([...localHeaderBuffers, ...cdHeaderBuffers, eocdHeader]);
   fs.writeFileSync(outPath, finalZipBuffer);
-  console.log(`✓ Packaged Chrome Extension ZIP at ${outPath} (${finalZipBuffer.length} bytes)`);
+  return finalZipBuffer;
 }
 
 function crc32Checksum(buf) {
@@ -100,6 +94,15 @@ function crc32Checksum(buf) {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-const extDir = path.join(__dirname, '..', '..', 'extension');
-const frontendOut = path.join(__dirname, '..', '..', 'frontend', 'sentinel_sebi_extension.zip');
-createZipFile(extDir, frontendOut);
+function ensureExtensionZip() {
+  const extDir = path.join(__dirname, '..', '..', 'extension');
+  const frontendOut = path.join(__dirname, '..', '..', 'frontend', 'sentinel_sebi_extension.zip');
+  return createZipFile(extDir, frontendOut);
+}
+
+if (require.main === module) {
+  ensureExtensionZip();
+  console.log('✓ Extension ZIP packaged cleanly.');
+}
+
+module.exports = { ensureExtensionZip };

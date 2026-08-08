@@ -94,11 +94,20 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/extension', express.static(path.join(__dirname, '../extension')));
 
 app.get('/download-extension', (req, res) => {
-  const zipPath = path.join(__dirname, '../frontend/sentinel_sebi_extension.zip');
-  if (fs.existsSync(zipPath)) {
-    return res.download(zipPath, 'sentinel_sebi_extension.zip');
+  try {
+    const { ensureExtensionZip } = require('./scripts/package_extension');
+    const zipPath = path.join(__dirname, '../frontend/sentinel_sebi_extension.zip');
+    if (!fs.existsSync(zipPath)) {
+      ensureExtensionZip();
+    }
+    if (fs.existsSync(zipPath)) {
+      return res.download(zipPath, 'sentinel_sebi_extension.zip');
+    }
+    res.status(404).json({ detail: 'Extension ZIP package not found.' });
+  } catch (err) {
+    console.error('[download-extension] Error packaging zip:', err.message);
+    res.status(500).json({ detail: `Extension packaging error: ${err.message}` });
   }
-  return res.status(404).json({ detail: 'Extension ZIP package not found.' });
 });
 
 /**
