@@ -82,7 +82,7 @@ Endpoints are split by whether the action makes an assertion about someone else.
 # Obtain a token
 curl -X POST http://127.0.0.1:8000/auth/login `
   -H "Content-Type: application/json" `
-  -d '{"username":"admin","password":"sebi_admin_2026"}'
+  -d '{"username":"admin","password":"<YOUR_SEEDED_ADMIN_PASSWORD>"}'
 
 # Use it
 curl -X POST http://127.0.0.1:8000/reports/cert-in-takedown `

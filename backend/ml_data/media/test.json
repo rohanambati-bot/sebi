@@ -1,0 +1,22 @@
+[
+  {
+    "id": "media_manip_test_01",
+    "label": "manipulated",
+    "campaign": "Image_Campaign_Test",
+    "features": {
+      "ela_variance": 50.3,
+      "dqt_quant_error": 19.8,
+      "metadata_anomaly_score": 0.88
+    }
+  },
+  {
+    "id": "media_authentic_test_01",
+    "label": "authentic",
+    "campaign": "Image_Authentic_Test",
+    "features": {
+      "ela_variance": 8.8,
+      "dqt_quant_error": 2.3,
+      "metadata_anomaly_score": 0.08
+    }
+  }
+]

@@ -1,0 +1,4 @@
+[
+  {"text": "FINAL NOTICE: Your trading portal login has been flagged by SEBI regulators. Update password now at http://sebi-verification-login.com", "label": "phishing", "campaign": "Campaign_C"},
+  {"text": "BSE Official Notice: Schedule of upcoming mock trading session for Equity Segment on Saturday.", "label": "legitimate", "campaign": "Legit_3"}
+]

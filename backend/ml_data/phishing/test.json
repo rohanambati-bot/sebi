@@ -1,0 +1,6 @@
+[
+  {"text": "SEBI Demat Alert: Failure to complete re-KYC by tonight will result in forfeiture of demat holdings. Verify at http://sebi-kyc-update.org", "label": "phishing", "campaign": "Campaign_D"},
+  {"text": "Join VIP WhatsApp stock pump group for 1000% returns guaranteed by SEBI registered analysts: https://chat.whatsapp.com/scam_group", "label": "phishing", "campaign": "Campaign_D"},
+  {"text": "SEBI Master Circular for Stock Brokers regarding Cyber Security and Cyber Resilience framework.", "label": "legitimate", "campaign": "Legit_4"},
+  {"text": "Your quarterly Demat holding statement from NSDL for month ending July 2026 is ready for download.", "label": "legitimate", "campaign": "Legit_4"}
+]

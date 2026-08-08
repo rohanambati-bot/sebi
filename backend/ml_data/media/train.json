@@ -1,0 +1,42 @@
+[
+  {
+    "id": "media_manip_01",
+    "label": "manipulated",
+    "campaign": "Image_Campaign_1",
+    "features": {
+      "ela_variance": 48.5,
+      "dqt_quant_error": 18.2,
+      "metadata_anomaly_score": 0.85
+    }
+  },
+  {
+    "id": "media_manip_02",
+    "label": "manipulated",
+    "campaign": "Image_Campaign_1",
+    "features": {
+      "ela_variance": 52.1,
+      "dqt_quant_error": 21.4,
+      "metadata_anomaly_score": 0.90
+    }
+  },
+  {
+    "id": "media_authentic_01",
+    "label": "authentic",
+    "campaign": "Image_Authentic_1",
+    "features": {
+      "ela_variance": 8.2,
+      "dqt_quant_error": 2.1,
+      "metadata_anomaly_score": 0.05
+    }
+  },
+  {
+    "id": "media_authentic_02",
+    "label": "authentic",
+    "campaign": "Image_Authentic_1",
+    "features": {
+      "ela_variance": 9.4,
+      "dqt_quant_error": 2.5,
+      "metadata_anomaly_score": 0.10
+    }
+  }
+]

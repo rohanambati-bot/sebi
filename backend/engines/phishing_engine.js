@@ -231,10 +231,12 @@ class PhishingEngine {
 
     const finalScore = Math.min(100, Math.max(0, Math.round(cumulativeRiskScore)));
 
-    // Calibrated ML Probability (Sigmoid transformation over deterministic feature score)
-    const mlProbability = parseFloat((1 / (1 + Math.exp(-(finalScore - 45) / 12))).toFixed(4));
+    // Real Trained ML Model Probability Inference
+    const mlPhishing = require('./ml_phishing_classifier');
+    const mlResult = mlPhishing.predict(content);
+    const mlProbability = mlResult.ml_probability !== null ? mlResult.ml_probability : parseFloat((1 / (1 + Math.exp(-(finalScore - 45) / 12))).toFixed(4));
 
-    // Risk Fusion (60% Rule Engine + 40% ML Model Probability)
+    // Hybrid Evidence Risk Fusion (60% Deterministic Rule Engine + 40% ML Model Probability)
     const calibratedScore = Math.min(100, Math.round(finalScore * 0.6 + (mlProbability * 100) * 0.4));
 
     let verdict = 'SAFE';
@@ -253,6 +255,10 @@ class PhishingEngine {
       senderDomain,
       explanation: flags,
       ml_probability: mlProbability,
+      model_status: mlResult.model_status,
+      model_version: mlResult.model_version,
+      sha256_verified: mlResult.sha256_verified,
+      top_features: mlResult.top_features || [],
       risk_fusion: {
         rule_score: finalScore,
         ml_score: Math.round(mlProbability * 100),

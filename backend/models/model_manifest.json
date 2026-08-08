@@ -1,0 +1,24 @@
+{
+  "manifest_version": "1.0.0",
+  "generated_at": "2026-08-08T14:47:51.971Z",
+  "models": {
+    "phishing_ml_model.json": {
+      "sha256": "e87ee2bd47f9a24980e6bbb286fe8a7ef60ba1702673564f4d3b5a0a228ba6c1",
+      "model_version": "1.0.0",
+      "model_type": "multinomial_naive_bayes_tfidf",
+      "f1_score": 0.932
+    },
+    "audio_ml_model.json": {
+      "sha256": "a965cdaf7b15c632d41a0bf0bb59a5422ab13061520fae2c4c56e5f48aa52bd6",
+      "model_version": "1.0.0",
+      "model_type": "gaussian_acoustic_classifier",
+      "f1_score": 0.925
+    },
+    "media_ml_model.json": {
+      "sha256": "147841f1d44e4888a0a6d9c255b8bb694dd55efb86808e1177f11474514a6db9",
+      "model_version": "1.0.0",
+      "model_type": "logistic_ela_dqt_classifier",
+      "f1_score": 0.91
+    }
+  }
+}

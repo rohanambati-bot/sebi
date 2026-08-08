@@ -1,0 +1,28 @@
+[
+  {
+    "id": "audio_synth_test_01",
+    "label": "synthetic_speech",
+    "campaign": "Voice_Campaign_Test",
+    "features": {
+      "zcr": 0.013,
+      "spectral_centroid": 1450.0,
+      "spectral_bandwidth": 1880.0,
+      "spectral_rolloff": 3120.0,
+      "energy_variance": 0.00035,
+      "mfccs": [12.1, -4.0, 7.9, 1.6, -2.2, 0.4, -1.0, 0.7, -0.4, 0.2, -0.1, 0.1, -0.1]
+    }
+  },
+  {
+    "id": "audio_human_test_01",
+    "label": "natural_human",
+    "campaign": "Human_Test",
+    "features": {
+      "zcr": 0.050,
+      "spectral_centroid": 2680.0,
+      "spectral_bandwidth": 2920.0,
+      "spectral_rolloff": 5280.0,
+      "energy_variance": 0.049,
+      "mfccs": [46.5, -18.8, 15.9, 6.5, -8.6, 3.3, -4.4, 2.2, -1.9, 1.3, -0.8, 0.5, -0.4]
+    }
+  }
+]

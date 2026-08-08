@@ -1,0 +1,54 @@
+[
+  {
+    "id": "audio_synth_01",
+    "label": "synthetic_speech",
+    "campaign": "Voice_Campaign_1",
+    "features": {
+      "zcr": 0.012,
+      "spectral_centroid": 1420.5,
+      "spectral_bandwidth": 1850.2,
+      "spectral_rolloff": 3100.0,
+      "energy_variance": 0.0004,
+      "mfccs": [12.4, -4.2, 8.1, 1.5, -2.3, 0.4, -1.1, 0.8, -0.5, 0.3, -0.2, 0.1, -0.1]
+    }
+  },
+  {
+    "id": "audio_synth_02",
+    "label": "synthetic_speech",
+    "campaign": "Voice_Campaign_1",
+    "features": {
+      "zcr": 0.015,
+      "spectral_centroid": 1480.0,
+      "spectral_bandwidth": 1910.0,
+      "spectral_rolloff": 3150.0,
+      "energy_variance": 0.0003,
+      "mfccs": [11.8, -3.9, 7.8, 1.8, -2.1, 0.5, -0.9, 0.7, -0.4, 0.2, -0.1, 0.1, 0.0]
+    }
+  },
+  {
+    "id": "audio_human_01",
+    "label": "natural_human",
+    "campaign": "Human_1",
+    "features": {
+      "zcr": 0.048,
+      "spectral_centroid": 2650.0,
+      "spectral_bandwidth": 2890.0,
+      "spectral_rolloff": 5200.0,
+      "energy_variance": 0.045,
+      "mfccs": [45.2, -18.4, 15.6, 6.2, -8.4, 3.1, -4.2, 2.1, -1.8, 1.2, -0.8, 0.5, -0.4]
+    }
+  },
+  {
+    "id": "audio_human_02",
+    "label": "natural_human",
+    "campaign": "Human_1",
+    "features": {
+      "zcr": 0.052,
+      "spectral_centroid": 2720.0,
+      "spectral_bandwidth": 2950.0,
+      "spectral_rolloff": 5350.0,
+      "energy_variance": 0.051,
+      "mfccs": [48.1, -19.1, 16.2, 6.8, -8.9, 3.5, -4.6, 2.4, -2.0, 1.4, -0.9, 0.6, -0.5]
+    }
+  }
+]

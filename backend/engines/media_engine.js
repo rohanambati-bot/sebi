@@ -98,6 +98,17 @@ class MediaEngine {
       riskScore = Math.max(riskScore, 80);
     }
 
+    const mlMedia = require('./ml_media_classifier');
+    const mlRes = mlMedia.predict({
+      ela_variance: dqtAnalysis.varianceScore * 50,
+      dqt_quant_error: dqtAnalysis.tablesFound * 5,
+      metadata_anomaly_score: exifAnalysis.editingSoftwareDetected ? 0.9 : 0.1
+    });
+
+    riskScore = mlRes.manipulation_probability !== null ? Math.round(mlRes.manipulation_probability * 100) : riskScore;
+    if (exifAnalysis.editingSoftwareDetected) riskScore = Math.max(riskScore, 75);
+    if (dqtAnalysis.varianceScore > 0.4) riskScore = Math.max(riskScore, 65);
+
     const flags = [];
     if (qrAnalysis.detected) {
       riskScore = Math.max(riskScore, 85);
@@ -109,16 +120,27 @@ class MediaEngine {
     }
 
     let verdict = 'GENUINE_MEDIA';
-    if (riskScore >= 70) verdict = 'MANIPULATED_SYNTHETIC_IMAGE';
+    if (riskScore >= 70) verdict = 'HIGH SYNTHETIC-MEDIA RISK';
     else if (riskScore >= 35) verdict = 'SUSPICIOUS_EDITED_MEDIA';
+
+    const exifMetadata = {
+      camera_make: exifAnalysis.metadata ? exifAnalysis.metadata.Make || null : null,
+      camera_model: exifAnalysis.metadata ? exifAnalysis.metadata.Model || null : null,
+      datetime_original: exifAnalysis.metadata ? exifAnalysis.metadata.DateTimeOriginal || null : null,
+      gps_present: !!(exifAnalysis.metadata && exifAnalysis.metadata.GPSInfo),
+      exif_extracted: !!exifAnalysis.metadata
+    };
 
     return {
       risk_score: riskScore,
       verdict,
-      model: 'JS Fallback: JPEG Quantization & EXIF Signal Analyzer',
+      model_status: mlRes.model_status,
+      model_version: mlRes.model_version,
+      sha256_verified: mlRes.sha256_verified,
+      manipulation_probability: mlRes.manipulation_probability,
       elaScore: parseFloat(dqtAnalysis.varianceScore.toFixed(3)),
       dqtTablesFound: dqtAnalysis.tablesFound,
-      exifData: exifAnalysis.metadata,
+      exifData: exifMetadata,
       editingSoftwareDetected: exifAnalysis.editingSoftwareDetected,
       qrDetected: qrAnalysis.detected,
       qrPayloads: qrAnalysis.payloads,

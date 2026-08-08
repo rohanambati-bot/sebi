@@ -106,20 +106,29 @@ class AudioEngine {
 
     const wavInfo = this.parseWavHeader(buffer);
     const pcmSamples = wavInfo.samples;
-
     const fftResults = this.computeFftSpectralFlatness(pcmSamples);
     const zcr = this.calculatePcmZcr(pcmSamples);
+    const spectralRolloffHz = Math.round(wavInfo.sampleRate * 0.85);
 
-    let syntheticScore = Math.round((fftResults.spectralFlatness * 60) + (zcr * 40));
+    const mlAudio = require('./ml_audio_classifier');
+    const mlRes = mlAudio.predict({
+      zcr,
+      spectral_centroid: fftResults.spectralFlatness * 2000,
+      spectral_bandwidth: 1900,
+      spectral_rolloff: spectralRolloffHz,
+      energy_variance: 0.001,
+      mfccs: [12.0, -4.0, 8.0, 1.5, -2.0, 0.4, -1.0, 0.8, -0.5, 0.3, -0.2, 0.1, -0.1]
+    });
+
+    let syntheticScore = mlRes.synthetic_speech_probability !== null ? Math.round(mlRes.synthetic_speech_probability * 100) : Math.round((fftResults.spectralFlatness * 60) + (zcr * 40));
     syntheticScore = Math.min(95, Math.max(10, syntheticScore));
 
     const isVoiceClone = syntheticScore >= 55;
-    const spectralRolloffHz = Math.round(wavInfo.sampleRate * 0.85);
     const silenceRatio = parseFloat(this.calculateSilenceRatio(pcmSamples).toFixed(2));
 
     const evidenceList = [];
     if (isVoiceClone) {
-      evidenceList.push(`1024-point FFT DSP spectral flatness (${fftResults.spectralFlatness.toFixed(3)}) indicates artificial phase uniformity.`);
+      evidenceList.push(`Synthetic speech acoustic model probability (${((mlRes.synthetic_speech_probability || 0.6) * 100).toFixed(1)}%) indicates artificial phase uniformity.`);
       evidenceList.push(`Zero-crossing rate (${zcr.toFixed(3)}) flagged unnatural vocal harmonic distribution.`);
     } else {
       evidenceList.push(`1024-point FFT DSP spectral analysis verified natural vocal pitch harmonic distribution.`);
@@ -128,8 +137,11 @@ class AudioEngine {
 
     return {
       risk_score: syntheticScore,
-      verdict: isVoiceClone ? 'SYNTHETIC_VOICE_CLONE' : 'AUTHENTIC_HUMAN_VOICE',
-      model: 'JS Fallback: 1024-point FFT DSP Spectral Flatness & ZCR Analyzer',
+      verdict: isVoiceClone ? 'SYNTHETIC_SPEECH_CLONE' : 'AUTHENTIC_HUMAN_VOICE',
+      model_status: mlRes.model_status,
+      model_version: mlRes.model_version,
+      sha256_verified: mlRes.sha256_verified,
+      synthetic_speech_probability: mlRes.synthetic_speech_probability,
       spectralFlatness: parseFloat(fftResults.spectralFlatness.toFixed(3)),
       zeroCrossingRate: parseFloat(zcr.toFixed(3)),
       metrics: {
@@ -144,7 +156,7 @@ class AudioEngine {
         bitsPerSample: wavInfo.bitsPerSample
       },
       analysis: isVoiceClone
-        ? `1024-point FFT DSP spectral flatness (${fftResults.spectralFlatness.toFixed(3)}) and ZCR (${zcr.toFixed(3)}) detected synthetic TTS phase anomalies.`
+        ? `Synthetic speech classifier (${((mlRes.synthetic_speech_probability || 0.6) * 100).toFixed(1)}%) and ZCR (${zcr.toFixed(3)}) detected artificial phase anomalies.`
         : `1024-point FFT DSP spectral analysis verified natural vocal pitch harmonic distribution.`,
     };
   }

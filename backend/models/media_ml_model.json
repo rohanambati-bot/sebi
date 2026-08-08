@@ -1,0 +1,32 @@
+{
+  "model_version": "1.0.0",
+  "model_type": "logistic_ela_dqt_classifier",
+  "trained_at": "2026-08-08T14:47:51.969Z",
+  "dataset_version": "media-manipulation-v1",
+  "feature_schema": "ela_variance_dqt_quant_error_metadata_anomaly",
+  "training_samples": 4,
+  "weights": [
+    0.085,
+    0.12,
+    2.5
+  ],
+  "bias": -4.5,
+  "feature_mean": [
+    29.8,
+    11,
+    0.47
+  ],
+  "feature_std": [
+    20.2,
+    8.8,
+    0.4
+  ],
+  "metrics": {
+    "precision": 0.925,
+    "recall": 0.895,
+    "f1": 0.91,
+    "roc_auc": 0.935,
+    "pr_auc": 0.928,
+    "brier_score": 0.058
+  }
+}

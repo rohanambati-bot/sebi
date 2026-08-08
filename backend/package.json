@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "train:all": "node scripts/train_all_ml_models.js",
+    "benchmark:ml": "node scripts/benchmark_ml_models.js",
+    "validate:ml-data": "node scripts/validate_ml_datasets.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
