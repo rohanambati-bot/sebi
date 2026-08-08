@@ -4,11 +4,23 @@
   "private": true,
   "scripts": {
     "postinstall": "npm --prefix backend install",
-    "start": "npm --prefix backend start",
-    "dev": "npm --prefix backend dev",
+    "start": "node backend/server.js",
+    "dev": "node backend/server.js",
     "test": "npm --prefix backend test",
     "train:all": "npm --prefix backend run train:all",
     "benchmark:ml": "npm --prefix backend run benchmark:ml",
     "validate:ml-data": "npm --prefix backend run validate:ml-data"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "express-rate-limit": "^8.6.2",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.14",
+    "multer": "^2.2.0",
+    "sqlite3": "^6.0.1",
+    "swagger-ui-express": "^5.0.1",
+    "tldts": "^7.4.9"
   }
 }
