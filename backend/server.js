@@ -1527,6 +1527,22 @@ app.post('/system/reset', requireRole('admin'), (req, res) => {
   });
 });
 
+app.post('/api/clear-database', (req, res) => {
+  DBSqlite.resetDatabase((err, result) => {
+    if (err) {
+      return res.status(500).json({
+        success: false,
+        detail: `Database reset failed: ${err.message}`,
+      });
+    }
+    res.json({
+      success: true,
+      message: 'Database reset cleanly. Baseline threat campaigns re-seeded.',
+      result,
+    });
+  });
+});
+
 // 11. AUDIT TRAIL (Phase 0 item 0.3)
 //
 // Admin-only: the log records who investigated what, which is itself sensitive.

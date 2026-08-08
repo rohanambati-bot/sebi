@@ -269,14 +269,28 @@
       <section id="panel-settings" class="tab-panel">
         <div class="glass-panel" style="padding:28px;">
           <h3 style="font-family: var(--font-heading); font-size: 18px; color:#fff; margin-bottom:16px;">
-            ⚙️ Console Settings &amp; Host Configuration
+            ⚙️ Console Settings &amp; System Administration
           </h3>
-          <div style="max-width:500px; display:flex; flex-direction:column; gap:16px;">
+          <div style="max-width:550px; display:flex; flex-direction:column; gap:24px;">
             <div>
               <label style="font-size:12px; font-weight:700; color:var(--text-muted); display:block; margin-bottom:6px;">BACKEND SERVER API HOST</label>
-              <input type="text" id="setting-api-host" class="input-glass" value="http://127.0.0.1:8000">
+              <div style="display:flex; gap:10px;">
+                <input type="text" id="setting-api-host" class="input-glass" value="http://127.0.0.1:8000">
+                <button class="btn-primary" onclick="saveSettings()">Save Host</button>
+              </div>
             </div>
-            <button class="btn-primary" onclick="saveSettings()">Save Configuration</button>
+
+            <div style="border-top:1px solid var(--border-glass); padding-top:20px;">
+              <h4 style="font-family:var(--font-heading); color:var(--neon-crimson); font-size:15px; margin-bottom:6px;">
+                🗑️ Database &amp; Scan Storage Management
+              </h4>
+              <p style="color:var(--text-muted); font-size:12px; margin-bottom:14px;">
+                Clears logged scans, IOC graph nodes, campaign correlations, and threat alerts. Re-seeds baseline demo environment.
+              </p>
+              <button class="btn-primary" style="background:var(--neon-crimson-grad); box-shadow:var(--glow-crimson); color:#fff;" onclick="clearDatabase()">
+                <span>🚨 Clear &amp; Purge Database</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>

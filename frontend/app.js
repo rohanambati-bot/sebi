@@ -441,3 +441,33 @@ function toggleRole(role) {
   
   showToast(`Role switched to ${role === 'sebi_admin' ? 'SEBI Admin' : 'Investor'}`);
 }
+
+function saveSettings() {
+  const host = document.getElementById('setting-api-host').value.trim();
+  if (!host) { showToast("Enter a valid API server host."); return; }
+  CONFIG.apiEndpoint = host;
+  showToast(`Backend API host set to ${host}`);
+}
+
+async function clearDatabase() {
+  if (!confirm("Are you sure you want to clear and reset the entire database? All scan history and campaign graphs will be reset.")) {
+    return;
+  }
+
+  showToast("Clearing database...");
+
+  try {
+    const res = await fetch(`${CONFIG.apiEndpoint}/api/clear-database`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast("Database cleared and baseline environment re-seeded!");
+      loadDashboard();
+      if (typeof loadReports === 'function') loadReports();
+      if (window.threat3D) window.threat3D.initDefaultNodes();
+    } else {
+      showToast(data.detail || "Database clear failed.");
+    }
+  } catch (e) {
+    showToast("Failed to connect to backend server for database clear.");
+  }
+}
