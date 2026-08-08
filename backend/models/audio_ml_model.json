@@ -1,7 +1,7 @@
 {
   "model_version": "1.0.0",
   "model_type": "gaussian_acoustic_classifier",
-  "trained_at": "2026-08-08T15:21:35.030Z",
+  "trained_at": "2026-08-08T15:35:28.868Z",
   "dataset_version": "audio-synth-v1",
   "feature_schema": "fft_zcr_centroid_bandwidth_rolloff_energy_mfcc1_13",
   "training_samples": 4,

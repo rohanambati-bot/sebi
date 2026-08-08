@@ -1,4 +1,6 @@
 [
-  {"text": "FINAL NOTICE: Your trading portal login has been flagged by SEBI regulators. Update password now at http://sebi-verification-login.com", "label": "phishing", "campaign": "Campaign_Val_1"},
-  {"text": "BSE Official Notice: Schedule of upcoming mock trading session for Equity Segment on Saturday.", "label": "legitimate", "campaign": "Legit_Val_1"}
+  {"text": "FINAL NOTICE: Your trading portal login has been flagged by SEBI regulators. Update password now at http://sebi-verification-login.com", "label": "phishing", "campaign": "Campaign_Val_Login_Scam"},
+  {"text": "BSE Official Notice: Schedule of upcoming mock trading session for Equity Segment on Saturday.", "label": "legitimate", "campaign": "Legit_Val_Exchange_Notice"},
+  {"text": "SEBI Urgent: Submit 25000 INR tax clearance fee to release your frozen IPO profit. Transfer to VPA: sebi.tax@okaxis", "label": "phishing", "campaign": "Campaign_Val_Fee_Scam"},
+  {"text": "Zerodha Broking: Your monthly fund statement for July 2026 is available on Console.", "label": "legitimate", "campaign": "Legit_Val_Fund_Statement"}
 ]

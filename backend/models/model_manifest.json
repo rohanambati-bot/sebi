@@ -1,19 +1,19 @@
 {
   "manifest_version": "1.0.0",
-  "generated_at": "2026-08-08T15:21:35.033Z",
+  "generated_at": "2026-08-08T15:35:28.871Z",
   "models": {
     "phishing_ml_model.json": {
-      "sha256": "8209aa7652bc128a451bec87f7fa68eb3c9a6b2b746beb0322727bac118e998e",
+      "sha256": "1a539f0e9328cd8e644807497afcff5b1c2f0bde80f6a0ff36f657ca5c360751",
       "model_version": "1.0.0",
       "model_type": "multinomial_naive_bayes_tfidf"
     },
     "audio_ml_model.json": {
-      "sha256": "eaa1db7dc44500f5400ae66b5f303e9481b15bcfe1ee15948c0024d4bbc8ea3e",
+      "sha256": "2a9e5e7df25bc35c4d0579b04db2af04e710ba4b8139c2d5625360319fdcc4a8",
       "model_version": "1.0.0",
       "model_type": "gaussian_acoustic_classifier"
     },
     "media_ml_model.json": {
-      "sha256": "22926a778b0952b7ecc1125c2b6b6be723fa275e1803369e0e3d1038abc864a6",
+      "sha256": "555472648b599229747871fb315f64d4a10bb3303ba2f007905009c666db1e5b",
       "model_version": "1.0.0",
       "model_type": "logistic_ela_dqt_classifier"
     }
