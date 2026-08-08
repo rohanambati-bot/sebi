@@ -3,7 +3,7 @@ services:
     name: sentinel-sebi
     env: node
     plan: free
-    buildCommand: npm install && npm rebuild sqlite3 --build-from-source && npm run train:all
+    buildCommand: npm install && npm run train:all
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
