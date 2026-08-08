@@ -475,6 +475,7 @@ async function clearDatabase() {
 function openExtensionGuide() {
   const modal = document.getElementById('extension-modal');
   if (modal) modal.style.display = 'flex';
+  window.location.href = '/download-extension';
 }
 
 function closeExtensionGuide() {

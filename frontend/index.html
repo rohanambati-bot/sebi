@@ -359,7 +359,7 @@
 
 <!-- Extension Guide Modal -->
 <div class="modal-backdrop" id="extension-modal">
-  <div class="modal-glass">
+  <div class="modal-glass" style="max-width:560px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
       <div style="font-family:var(--font-heading); font-size:20px; font-weight:800; color:#fff; display:flex; align-items:center; gap:10px;">
         <span>🛡️ Install SentinelSEBI Extension Shield</span>
@@ -373,7 +373,17 @@
 
     <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:24px;">
       <div style="display:flex; gap:14px; align-items:flex-start;">
-        <div style="width:28px; height:28px; background:var(--neon-amber-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">1</div>
+        <div style="width:28px; height:28px; background:var(--neon-cyan-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">1</div>
+        <div>
+          <b style="color:#fff; font-size:13.5px;">Download Extension Package</b>
+          <p style="font-size:12px; color:var(--text-muted);">
+            Click <a href="/download-extension" style="color:var(--neon-cyan); font-weight:700; text-decoration:underline;">Download sentinel_sebi_extension.zip</a> and extract the folder on your machine.
+          </p>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:28px; height:28px; background:var(--neon-amber-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">2</div>
         <div>
           <b style="color:#fff; font-size:13.5px;">Open Chrome Extension Manager</b>
           <p style="font-size:12px; color:var(--text-muted);">Navigate to <code style="color:var(--neon-amber);">chrome://extensions</code> in your browser and enable <b>Developer mode</b> (top right toggle).</p>
@@ -381,24 +391,17 @@
       </div>
 
       <div style="display:flex; gap:14px; align-items:flex-start;">
-        <div style="width:28px; height:28px; background:var(--neon-amber-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">2</div>
-        <div>
-          <b style="color:#fff; font-size:13.5px;">Load Unpacked Extension Folder</b>
-          <p style="font-size:12px; color:var(--text-muted);">Click <b>Load unpacked</b> and select the <code style="color:var(--neon-cyan);">sebi/extension</code> directory from this project.</p>
-        </div>
-      </div>
-
-      <div style="display:flex; gap:14px; align-items:flex-start;">
         <div style="width:28px; height:28px; background:var(--neon-emerald-grad); border-radius:50%; color:#000; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;">3</div>
         <div>
-          <b style="color:#fff; font-size:13.5px;">Active Background Protection Enabled</b>
-          <p style="font-size:12px; color:var(--text-muted);">The shield icon will appear in your Chrome toolbar, automatically flagging scam emails and fake stock tips!</p>
+          <b style="color:#fff; font-size:13.5px;">Load Unpacked Extension Folder</b>
+          <p style="font-size:12px; color:var(--text-muted);">Click <b>Load unpacked</b> and select the extracted <code style="color:var(--neon-emerald);">extension</code> directory.</p>
         </div>
       </div>
     </div>
 
-    <div style="display:flex; justify-content:flex-end; gap:10px;">
-      <button class="btn-primary" onclick="closeExtensionGuide()">Got It — Enable Shield</button>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <a href="/download-extension" class="btn-primary" style="text-decoration:none;">📥 Download Extension ZIP</a>
+      <button class="btn-secondary" onclick="closeExtensionGuide()">Got It — Shield Enabled</button>
     </div>
   </div>
 </div>

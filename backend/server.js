@@ -92,6 +92,14 @@ const MAX_TEXT_LENGTH = 50000;
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/extension', express.static(path.join(__dirname, '../extension')));
 
+app.get('/download-extension', (req, res) => {
+  const zipPath = path.join(__dirname, '../frontend/sentinel_sebi_extension.zip');
+  if (fs.existsSync(zipPath)) {
+    return res.download(zipPath, 'sentinel_sebi_extension.zip');
+  }
+  return res.status(404).json({ detail: 'Extension ZIP package not found.' });
+});
+
 /**
  * Request context: resolve the caller (anonymous when no token) and capture the
  * network provenance every audit entry and scan row needs.
